@@ -491,8 +491,6 @@ services:
         PHP_UID: "${DC_ORO_PHP_UID:-1000}"
         PHP_GID: "${DC_ORO_PHP_GID:-1000}"
         COMPOSER_VERSION: "${DC_ORO_COMPOSER_VERSION:-2}"
-    tmpfs:
-      - /tmp:rw,size=256m
     user: "root"
     command: docker-sshd
     volumes:
@@ -500,6 +498,7 @@ services:
       - "home-user:/home/${DC_ORO_PHP_USER_NAME:-developer}"
       - "home-root:/root"
       - "ssh-hostkeys:/etc/ssh/hostkeys"
+      - "shared-tmp:/tmp:rw"
       - "shared-private:/private:rw"
     working_dir: "${DC_ORO_APPDIR:-/var/www}"
     ports:

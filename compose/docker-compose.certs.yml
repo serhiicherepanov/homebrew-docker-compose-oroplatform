@@ -1,0 +1,84 @@
+# Docker Compose override for projects with custom certificates
+# This file extends the base docker-compose.yml for projects that have certificates in .crt folder
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.certs.yml up
+
+services:
+  fpm:
+    build:
+      dockerfile: docker/php-node-symfony/Dockerfile.project-certs
+      context: .
+      args:
+        BASE_IMAGE: ghcr.io/digitalspacestdio/orodc-php-node-symfony:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}
+        PHP_USER_NAME: "${DC_ORO_PHP_USER_NAME:-developer}"
+        APP_DIR: "${DC_ORO_APPDIR:-/var/www}"
+        PHP_VERSION: "${DC_ORO_PHP_VERSION:-8.4}"
+        NODE_VERSION: "${DC_ORO_NODE_VERSION:-22}"
+        PHP_USER_GROUP: "${DC_ORO_PHP_USER_GROUP:-developer}"
+        PHP_UID: "${DC_ORO_PHP_UID:-1000}"
+        PHP_GID: "${DC_ORO_PHP_GID:-1000}"
+        COMPOSER_VERSION: "${DC_ORO_COMPOSER_VERSION:-2}"
+    image: "${DC_ORO_NAME:-unnamed}-php-with-certs:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}"
+
+  cli:
+    build:
+      dockerfile: docker/php-node-symfony/Dockerfile.project-certs
+      context: .
+      args:
+        BASE_IMAGE: ghcr.io/digitalspacestdio/orodc-php-node-symfony:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}
+        PHP_USER_NAME: "${DC_ORO_PHP_USER_NAME:-developer}"
+        APP_DIR: "${DC_ORO_APPDIR:-/var/www}"
+        PHP_VERSION: "${DC_ORO_PHP_VERSION:-8.4}"
+        NODE_VERSION: "${DC_ORO_NODE_VERSION:-22}"
+        PHP_USER_GROUP: "${DC_ORO_PHP_USER_GROUP:-developer}"
+        PHP_UID: "${DC_ORO_PHP_UID:-1000}"
+        PHP_GID: "${DC_ORO_PHP_GID:-1000}"
+        COMPOSER_VERSION: "${DC_ORO_COMPOSER_VERSION:-2}"
+    image: "${DC_ORO_NAME:-unnamed}-php-with-certs:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}"
+
+  consumer:
+    build:
+      dockerfile: docker/php-node-symfony/Dockerfile.project-certs
+      context: .
+      args:
+        BASE_IMAGE: ghcr.io/digitalspacestdio/orodc-php-node-symfony:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}
+        PHP_USER_NAME: "${DC_ORO_PHP_USER_NAME:-developer}"
+        APP_DIR: "${DC_ORO_APPDIR:-/var/www}"
+        PHP_VERSION: "${DC_ORO_PHP_VERSION:-8.4}"
+        NODE_VERSION: "${DC_ORO_NODE_VERSION:-22}"
+        PHP_USER_GROUP: "${DC_ORO_PHP_USER_GROUP:-developer}"
+        PHP_UID: "${DC_ORO_PHP_UID:-1000}"
+        PHP_GID: "${DC_ORO_PHP_GID:-1000}"
+        COMPOSER_VERSION: "${DC_ORO_COMPOSER_VERSION:-2}"
+    image: "${DC_ORO_NAME:-unnamed}-php-with-certs:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}"
+
+  websocket:
+    build:
+      dockerfile: docker/php-node-symfony/Dockerfile.project-certs
+      context: .
+      args:
+        BASE_IMAGE: ghcr.io/digitalspacestdio/orodc-php-node-symfony:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}
+        PHP_USER_NAME: "${DC_ORO_PHP_USER_NAME:-developer}"
+        APP_DIR: "${DC_ORO_APPDIR:-/var/www}"
+        PHP_VERSION: "${DC_ORO_PHP_VERSION:-8.4}"
+        NODE_VERSION: "${DC_ORO_NODE_VERSION:-22}"
+        PHP_USER_GROUP: "${DC_ORO_PHP_USER_GROUP:-developer}"
+        PHP_UID: "${DC_ORO_PHP_UID:-1000}"
+        PHP_GID: "${DC_ORO_PHP_GID:-1000}"
+        COMPOSER_VERSION: "${DC_ORO_COMPOSER_VERSION:-2}"
+    image: "${DC_ORO_NAME:-unnamed}-php-with-certs:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}"
+
+  ssh:
+    build:
+      dockerfile: docker/php-node-symfony/Dockerfile.project-certs
+      context: .
+      args:
+        BASE_IMAGE: ghcr.io/digitalspacestdio/orodc-php-node-symfony:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}
+        PHP_USER_NAME: "${DC_ORO_PHP_USER_NAME:-developer}"
+        APP_DIR: "${DC_ORO_APPDIR:-/var/www}"
+        PHP_VERSION: "${DC_ORO_PHP_VERSION:-8.4}"
+        NODE_VERSION: "${DC_ORO_NODE_VERSION:-22}"
+        PHP_USER_GROUP: "${DC_ORO_PHP_USER_GROUP:-developer}"
+        PHP_UID: "${DC_ORO_PHP_UID:-1000}"
+        PHP_GID: "${DC_ORO_PHP_GID:-1000}"
+        COMPOSER_VERSION: "${DC_ORO_COMPOSER_VERSION:-2}"
+    image: "${DC_ORO_NAME:-unnamed}-php-with-certs:${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}-${DC_ORO_PHP_DIST:-alpine}"

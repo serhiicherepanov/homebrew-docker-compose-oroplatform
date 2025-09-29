@@ -57,6 +57,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Check Docker availability
+        run: |
+          echo "=== Docker Environment Check ==="
+          echo "Docker version:"
+          docker --version || echo "❌ Docker not available"
+          echo "Docker info:"
+          docker info || echo "❌ Docker info failed"
+          echo "Docker Compose version:"
+          docker compose version || echo "❌ Docker Compose not available"
+          echo "Current user groups:"
+          groups $(whoami) || echo "❌ Groups check failed"
+          echo "Docker socket permissions:"
+          ls -la /var/run/docker.sock || echo "❌ Docker socket not found"
+          echo "=== End Docker Check ==="
+
       - name: Setup non-root user for Homebrew
         run: |
           # Display current environment for debugging
@@ -442,6 +457,21 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Check Docker availability
+        run: |
+          echo "=== Docker Environment Check ==="
+          echo "Docker version:"
+          docker --version || echo "❌ Docker not available"
+          echo "Docker info:"
+          docker info || echo "❌ Docker info failed"
+          echo "Docker Compose version:"
+          docker compose version || echo "❌ Docker Compose not available"
+          echo "Current user groups:"
+          groups $(whoami) || echo "❌ Groups check failed"
+          echo "Docker socket permissions:"
+          ls -la /var/run/docker.sock || echo "❌ Docker socket not found"
+          echo "=== End Docker Check ==="
 
       - name: Setup non-root user for Homebrew
         run: |

@@ -30,6 +30,47 @@ git checkout -b feature/your-branch-name
 
 ---
 
+# 🚨 **CRITICAL: NEVER PUSH TO UPSTREAM!**
+
+## ⛔ **ABSOLUTELY FORBIDDEN COMMANDS:**
+
+```bash
+# ❌ NEVER PUSH TO UPSTREAM REMOTES!
+git push main master           # FORBIDDEN!
+git push upstream master       # FORBIDDEN!
+git push main feature-branch   # FORBIDDEN!
+
+# ❌ NEVER MERGE DIRECTLY TO UPSTREAM!
+git checkout master
+git merge feature-branch
+git push main master           # FORBIDDEN!
+```
+
+## ✅ **CORRECT WORKFLOW - ONLY PULL REQUESTS:**
+
+```bash
+# ✅ ALWAYS work with YOUR FORK (origin):
+git push origin feature-branch        # Push to YOUR fork
+git push -u origin feature-branch     # Set upstream tracking
+
+# ✅ Then create Pull Request via GitHub interface
+# ✅ Let maintainers merge via PR process
+```
+
+**🔥 WHY THIS RULE EXISTS:**
+- 🔍 **Code Review**: Every change must be reviewed
+- 🛡️ **Quality Control**: Prevent breaking changes  
+- 📝 **Documentation**: Maintain clear change history
+- 🤝 **Collaboration**: Allow team discussion
+- 🔄 **CI/CD**: Automated testing before merge
+
+**⚠️ UPSTREAM = READ-ONLY FOR AGENTS:**
+- `main` remote = upstream repository (digitalspacestdio/...)
+- `origin` remote = your fork (YOUR-USERNAME/...)
+- **ONLY pull from upstream, NEVER push!**
+
+---
+
 # Git Workflow Guidelines
 
 ## 🔄 **Upstream Repository Management**
@@ -491,9 +532,11 @@ orodc ssh                         # Container access
 
 ### Repository Management (CRITICAL):
 - **ALWAYS merge/pull ONLY from remote repositories** (origin, main, upstream)
-- **NEVER suggest merging local branches** unless explicitly requested by user
+- **NEVER push to upstream repositories** - only to your fork (origin)
+- **NEVER merge local branches to upstream** - only via Pull Requests
 - Default workflow: `git pull --rebase origin master` or `git rebase master` after updating from remote
 - When updating branches: always sync with remote first, then rebase feature branches
+- **UPSTREAM IS READ-ONLY**: Pull from upstream, push only to origin, merge only via PR
 - Exception: Only merge local branches if user explicitly asks for local branch operations
 
 ## OroDC Configuration Directory Customization

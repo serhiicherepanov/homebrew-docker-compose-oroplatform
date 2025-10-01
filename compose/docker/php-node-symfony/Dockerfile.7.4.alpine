@@ -121,13 +121,6 @@ RUN apk add --no-cache --sudo; \
 # Install Python 2
 RUN apk add --no-cache python2
 
-# Install deps for for node-saas
-RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories; \
-    apk add --no-cache gcc g++ make
-
-ENV CXXFLAGS="-std=c++14"
-ENV CFLAGS="-std=c++14"
-
 # Zsh + starship
 RUN set -eux && \
   apk add --no-cache zsh && \

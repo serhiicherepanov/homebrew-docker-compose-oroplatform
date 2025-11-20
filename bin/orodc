@@ -1231,7 +1231,7 @@ if [[ "$first_non_flag_arg" == "up" ]]; then
   printf "\033[0;37m[${DC_ORO_NAME}] Elasticsearch: http://localhost:${DC_ORO_PORT_SEARCH}\033[0m\n"
   printf "\033[0;37m[${DC_ORO_NAME}] Mq: http://localhost:${DC_ORO_PORT_MQ}\033[0m\n"
   
-  if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]];then
+  if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]];then
     printf "\033[0;37m[${DC_ORO_NAME}] Database: 127.0.0.1:${DC_ORO_PORT_PGSQL}\033[0m\n"
   elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_mysql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]];then
     printf "\033[0;37m[${DC_ORO_NAME}] Database: 127.0.0.1:${DC_ORO_PORT_MYSQL}\033[0m\n"
@@ -1258,7 +1258,7 @@ if echo "$first_non_flag_arg" | grep -i 'import' | grep -i 'db\|database' > /dev
   fi
 
   DB_DUMP_BASENAME=$(echo "${DB_DUMP##*/}")
-  if [[ $DC_ORO_DATABASE_SCHEMA == "pdo_pgsql" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "postgres" ]];then
+  if [[ $DC_ORO_DATABASE_SCHEMA == "pdo_pgsql" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "pgsql" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "postgres" ]];then
     DB_IMPORT_CMD="sed -E 's/[Oo][Ww][Nn][Ee][Rr]:[[:space:]]*[a-zA-Z0-9_]+/Owner: '\$DC_ORO_DATABASE_USER'/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr][[:space:]]+[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+/OWNER TO '\$DC_ORO_DATABASE_USER'/g' | sed -E '/^[[:space:]]*[Rr][Ee][Vv][Oo][Kk][Ee][[:space:]]+[Aa][Ll][Ll]/d' | sed -e '/SET transaction_timeout = 0;/d' | sed -E '/^\\\\restrict|^\\\\unrestrict/d' | PGPASSWORD=\$DC_ORO_DATABASE_PASSWORD psql --set ON_ERROR_STOP=on -h \$DC_ORO_DATABASE_HOST -p \$DC_ORO_DATABASE_PORT -U \$DC_ORO_DATABASE_USER -d \$DC_ORO_DATABASE_DBNAME -1 >/dev/null"
   elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_mysql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]];then
     DB_IMPORT_CMD="sed -E 's/[Dd][Ee][Ff][Ii][Nn][Ee][Rr][ ]*=[ ]*[^*]*\*/DEFINER=CURRENT_USER \*/' | MYSQL_PWD=\$DC_ORO_DATABASE_PASSWORD mysql -h\$DC_ORO_DATABASE_HOST -P\$DC_ORO_DATABASE_PORT -u\$DC_ORO_DATABASE_USER \$DC_ORO_DATABASE_DBNAME"
@@ -1349,7 +1349,7 @@ if echo "$first_non_flag_arg" | grep -i 'export\|dump' | grep -i 'db\|database' 
   DB_DUMP=$DC_ORO_APPDIR/database-$(date +'%Y%m%d%H%M%S').sql.gz
   DB_DUMP_BASENAME=$(echo "${DB_DUMP##*/}")
   touch "${DB_DUMP}"
-  if [[ $DC_ORO_DATABASE_SCHEMA == "pgsql" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "postgres" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "postgresql" ]]; then
+  if [[ $DC_ORO_DATABASE_SCHEMA == "pdo_pgsql" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "pgsql" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "postgres" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "postgresql" ]]; then
     DB_EXPORT_CMD="PGPASSWORD=\$DC_ORO_DATABASE_PASSWORD pg_dump -Fp --clean --if-exists -h \$DC_ORO_DATABASE_HOST -p \$DC_ORO_DATABASE_PORT -U \$DC_ORO_DATABASE_USER -d \$DC_ORO_DATABASE_DBNAME"
   elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "mariadb" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]];then
     DB_EXPORT_CMD="MYSQL_PWD=\$DC_ORO_DATABASE_PASSWORD mysqldump --no-tablespaces --column-statistics=0 --set-gtid-purged=OFF --quick --max-allowed-packet=16M --disable-keys --hex-blob --no-autocommit --insert-ignore --skip-lock-tables --single-transaction -h\$DC_ORO_DATABASE_HOST -P\$DC_ORO_DATABASE_PORT -u\$DC_ORO_DATABASE_USER \$DC_ORO_DATABASE_DBNAME | sed -E 's/[Dd][Ee][Ff][Ii][Nn][Ee][Rr][ ]*=[ ]*[^*]*\*/DEFINER=CURRENT_USER \*/'"
@@ -1666,7 +1666,7 @@ EOF
       
       # Check if test database already exists
       DB_EXISTS=false
-      if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]]; then
+      if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]]; then
         # Check PostgreSQL database existence
         if ${TEST_COMPOSE_CMD} run --rm database-cli bash -c "PGPASSWORD=\$DC_ORO_DATABASE_PASSWORD psql -h \$DC_ORO_DATABASE_HOST -p \$DC_ORO_DATABASE_PORT -U \$DC_ORO_DATABASE_USER -d \$DC_ORO_DATABASE_DBNAME -c 'SELECT 1 FROM pg_database WHERE datname = '\''${DC_ORO_TEST_DATABASE_DBNAME}'\'';'" 2>/dev/null | grep -q "1 row"; then
           DB_EXISTS=true
@@ -1682,7 +1682,7 @@ EOF
         echo "Test database ${DC_ORO_TEST_DATABASE_DBNAME} already exists, skipping database setup..."
       else
         echo "Creating test database ${DC_ORO_TEST_DATABASE_DBNAME}..."
-        if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]]; then
+        if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]]; then
           # PostgreSQL commands using test-specific environment variables
           ${TEST_COMPOSE_CMD} run --rm database-cli bash -c "PGPASSWORD=${DC_ORO_TEST_DATABASE_PASSWORD} psql -h ${DC_ORO_TEST_DATABASE_HOST} -p ${DC_ORO_TEST_DATABASE_PORT} -U ${DC_ORO_TEST_DATABASE_USER} -d \$DC_ORO_DATABASE_DBNAME -c 'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '\''${DC_ORO_TEST_DATABASE_DBNAME}'\'';'" 2>/dev/null || true
           ${TEST_COMPOSE_CMD} run --rm database-cli bash -c "PGPASSWORD=${DC_ORO_TEST_DATABASE_PASSWORD} psql -h ${DC_ORO_TEST_DATABASE_HOST} -p ${DC_ORO_TEST_DATABASE_PORT} -U ${DC_ORO_TEST_DATABASE_USER} -d \$DC_ORO_DATABASE_DBNAME -c 'DROP DATABASE IF EXISTS ${DC_ORO_TEST_DATABASE_DBNAME};'" 2>/dev/null || true
@@ -1797,7 +1797,7 @@ EOF
       MAIN_COMPOSE_CMD="${DOCKER_COMPOSE_BIN} -f ${DC_ORO_CONFIG_DIR}/docker-compose.yml"
       
       # Add database-specific compose file
-      if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]];then
+      if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]];then
         MAIN_COMPOSE_CMD="${MAIN_COMPOSE_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-pgsql.yml"
       elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "mariadb" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]];then
         MAIN_COMPOSE_CMD="${MAIN_COMPOSE_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-mysql.yml"
@@ -1822,7 +1822,7 @@ EOF
       # Test database name = main database name + _test suffix
       echo "Dropping test database ${DC_ORO_TEST_DATABASE_DBNAME}..."
       
-      if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]]; then
+      if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]]; then
         # PostgreSQL commands using test-specific environment variables
         ${MAIN_COMPOSE_CMD} run --rm database-cli bash -c "PGPASSWORD=${DC_ORO_TEST_DATABASE_PASSWORD} psql -h ${DC_ORO_TEST_DATABASE_HOST} -p ${DC_ORO_TEST_DATABASE_PORT} -U ${DC_ORO_TEST_DATABASE_USER} -d \$DC_ORO_DATABASE_DBNAME -c 'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '\''${DC_ORO_TEST_DATABASE_DBNAME}'\'';'" 2>/dev/null || true
         ${MAIN_COMPOSE_CMD} run --rm database-cli bash -c "PGPASSWORD=${DC_ORO_TEST_DATABASE_PASSWORD} psql -h ${DC_ORO_TEST_DATABASE_HOST} -p ${DC_ORO_TEST_DATABASE_PORT} -U ${DC_ORO_TEST_DATABASE_USER} -d \$DC_ORO_DATABASE_DBNAME -c 'DROP DATABASE ${DC_ORO_TEST_DATABASE_DBNAME};'" 2>/dev/null || true

@@ -247,61 +247,23 @@ This creates a configuration that proxies `*.docker.local` requests from host Tr
 
 **3. Start Traefik inside Docker:**
 
-Create `docker-compose.yml` for Traefik in Docker:
-
-```yaml
-# ~/traefik-docker/docker-compose.yml
-services:
-  traefik_docker_local:
-    hostname: traefik.docker.local
-    image: traefik:v2.11
-    container_name: traefik_docker_local
-    command:
-        - "--ping=true"
-        - "--log.level=DEBUG"
-        - "--api=true"
-        - "--api.dashboard=true"
-        - "--providers.docker=true"
-        - "--providers.docker.exposedbydefault=false"
-        - "--entrypoints.default.address=:80"
-        - "--entrypoints.default.forwardedheaders.trustedips=0.0.0.0/0"
-        - "--entryPoints.default.forwardedHeaders.insecure"
-    restart: always
-    ports:
-      - "${TRAEFIK_BIND_ADDRESS:-0.0.0.0}:${TRAEFIK_BIND_PORT:-8880}:80"
-    networks:
-      - "dc_shared_net"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    labels:
-      traefik.enable: 'true'
-      traefik.http.routers.traefik-api.rule: 'PathPrefix(`/traefik/dashboard`) || (PathPrefix(`/api`) && HeadersRegexp(`referer`, `/traefik/dashboard`))'
-      traefik.http.routers.traefik-api.priority: 9000
-      traefik.http.routers.traefik-api.entrypoints: "default"
-      traefik.http.routers.traefik-api.service: "api@internal"
-      traefik.http.routers.traefik-api.middlewares: "traefik-api-stripprefix"
-      traefik.http.middlewares.traefik-api-stripprefix.stripprefix.prefixes: "/traefik"
-    healthcheck:
-      test: traefik healthcheck --ping
-      start_period: 5s
-      interval: 5s
-      retries: 30
-
-networks:
-  dc_shared_net:
-    name: dc_shared_net
-    external: true
-```
-
-**Start Docker Traefik:**
+Use the built-in OroDC command to install Traefik in Docker:
 
 ```bash
-mkdir -p ~/traefik-docker
-cd ~/traefik-docker
-# Create docker-compose.yml (content above)
-docker network create dc_shared_net 2>/dev/null || true
-docker-compose up -d
+# Install Traefik proxy in Docker (one command!)
+orodc install-proxy
+
+# Or with DEBUG logging
+DEBUG=1 orodc install-proxy
 ```
+
+This command automatically:
+- Creates `dc_shared_net` network
+- Starts Traefik container on port 8880
+- Configures auto-discovery for Docker containers
+- Sets up dashboard at <http://localhost:8880/traefik/dashboard/>
+
+For manual installation or advanced configuration, see [Reverse Proxy Management](#-reverse-proxy-management) section.
 
 **Architecture:** `Browser → Traefik (host) → Traefik (docker) → Nginx (container)`
 

@@ -276,18 +276,25 @@
 - [ ] 9.3 Implement database export (from tasks 8.4-8.5)
 - [ ] 9.4-9.8 (keep existing database tasks)
 
-## 7a. JSON Communication Protocol
-- [ ] 7a.1 Design JSON communication protocol (stdin/stdout)
-  - Input: JSON via stdin
-  - Output: JSON via stdout
-  - Logs: stderr (debug, execution steps)
-- [ ] 7a.2 Create JSON helper functions in bin/dcx.d/45-json-helpers.sh
+## 7a. Hybrid JSON Communication Protocol (stdin + ENV)
+- [ ] 7a.1 Design hybrid JSON communication protocol
+  - Context: JSON via DCX_CONTEXT environment variable (shared, immutable)
+  - Input: JSON via stdin (command-specific data)
+  - Output: JSON via stdout (command result)
+  - Logs: stderr (debug, execution steps, JSON dumps)
+- [ ] 7a.2 Define DCX_CONTEXT structure
+  - dcx.version, dcx.plugin, dcx.mode
+  - paths.project_root, paths.config_dir, paths.compose_dir
+  - state.containers_running, state.database_initialized
+  - Optional: user info, system info
+- [ ] 7a.4 Create JSON helper functions in bin/dcx.d/45-json-helpers.sh
   - log() - log to stderr with timestamp
   - log_json() - pretty-print JSON to stderr with colors
+  - read_context() - read and parse DCX_CONTEXT (with defaults)
   - success_result() - generate success JSON
   - error_result() - generate error JSON
-  - validate_json() - validate JSON against schema
-- [ ] 7a.3 Define standard result JSON format
+  - validate_json() - validate JSON against schema (jq-based)
+- [ ] 7a.5 Define standard result JSON format
   - status: "success" | "error"
   - message: human-readable message
   - exit_code: integer (0 for success)
@@ -299,16 +306,18 @@
   - command-result.schema.json (standard result format)
   - project-config.schema.json (project configuration)
   - database-config.schema.json (database configuration)
-- [ ] 7a.5 Implement JSON validation function
-  - Use ajv-cli if available (strict validation)
-  - Fallback to jq for basic validation
-  - Validate before executing command (input)
-  - Validate before returning result (output, advisory)
-- [ ] 7a.6 Add JSON Schema to dependencies
-  - Document ajv-cli requirement (npm install -g ajv-cli)
-  - Provide installation instructions
-  - Optional but recommended for development
-- [ ] 7a.7 Write tests for JSON helpers
+- [ ] 7a.6 Implement jq-based JSON validation function
+  - Check JSON syntax validity (jq empty)
+  - Extract required fields from schema
+  - Validate required fields exist
+  - Validate field types match schema
+  - No external dependencies (jq only)
+- [ ] 7a.7 Create DCX_CONTEXT management in core
+  - Build context JSON at dcx startup
+  - Export DCX_CONTEXT environment variable
+  - Context persists for all commands in session
+  - Log context to debug log
+- [ ] 7a.8 Write tests for JSON helpers
   - Test success_result() format
   - Test error_result() format
   - Test log_json() output
@@ -417,44 +426,49 @@
   - plugins/oro/schemas/updateurl-output.schema.json
   - plugins/oro/schemas/tests-input.schema.json
   - plugins/oro/schemas/tests-output.schema.json
-- [ ] 9.6 Create command: install (with JSON I/O)
+- [ ] 9.6 Create command: install (with hybrid JSON)
   - plugins/oro/commands/install/run.sh (installation script with JSON)
+    - Read context from DCX_CONTEXT environment (dcx version, paths, state)
     - Read JSON from stdin (project, database, oro config)
-    - Validate input against install-input.schema.json
-    - Log execution to stderr (input JSON, steps, outputs)
+    - Validate stdin input against install-input.schema.json
+    - Log both context and input to stderr
     - Return success/error JSON to stdout
   - plugins/oro/commands/install/README.md (JSON documentation)
     - When Called: dcx install, after dcx up -d
-    - Input Schema: JSON structure with project, database, oro fields
+    - Context Schema: DCX_CONTEXT with dcx info, paths, state
+    - Input Schema: JSON stdin with project, database, oro fields
     - Output Schema: success/error result with installation details
     - Expected Behavior: composer install + oro:install
-    - Logging: What goes to stderr
-    - Usage Examples: basic JSON, advanced JSON, jq parsing
+    - Logging: Context and input to stderr
+    - Usage Examples: pipe JSON, fixtures, jq parsing
     - Error Handling: error JSON format
-- [ ] 9.7 Create command: platformupdate (with JSON I/O)
+- [ ] 9.7 Create command: platformupdate (with hybrid JSON)
   - plugins/oro/commands/platformupdate/run.sh (update script with JSON)
   - plugins/oro/commands/platformupdate/README.md (JSON documentation)
     - When Called: dcx platformupdate, after database import
-    - Input Schema: JSON with project, options (skip-assets, force)
+    - Context Schema: DCX_CONTEXT (available but optional)
+    - Input Schema: JSON stdin with project, options (skip-assets, force)
     - Output Schema: success/error with update details
     - Expected Behavior: oro:platform:update
-    - Usage Examples: basic update, with options, result parsing
-- [ ] 9.8 Create command: updateurl (with JSON I/O)
+    - Usage Examples: pipe JSON, with options, result parsing
+- [ ] 9.8 Create command: updateurl (with hybrid JSON)
   - plugins/oro/commands/updateurl/run.sh (URL update script with JSON)
   - plugins/oro/commands/updateurl/README.md (JSON documentation)
     - When Called: dcx updateurl, after environment change
-    - Input Schema: JSON with project.name, urls.base, urls.secure
+    - Context Schema: DCX_CONTEXT with paths
+    - Input Schema: JSON stdin with urls.base, urls.secure
     - Output Schema: success/error with updated URLs
     - Expected Behavior: Update oro_config_value URLs via SQL
-    - Usage Examples: local dev URLs, custom domain
-- [ ] 9.9 Create command: tests (with JSON I/O)
+    - Usage Examples: pipe JSON, custom domain
+- [ ] 9.9 Create command: tests (with hybrid JSON)
   - plugins/oro/commands/tests/run.sh (test environment script with JSON)
   - plugins/oro/commands/tests/README.md (JSON documentation)
     - When Called: dcx tests [command]
-    - Input Schema: JSON with test.command, test.args, test.env
+    - Context Schema: DCX_CONTEXT with test environment info
+    - Input Schema: JSON stdin with test.command, test.args, test.env
     - Output Schema: success/error with test results
     - Expected Behavior: Isolated test environment execution
-    - Usage Examples: phpunit, behat, with custom args
+    - Usage Examples: pipe JSON, phpunit, behat
 - [ ] 9.10 Create plugins/oro/README.md (plugin documentation)
   - Plugin Overview: Oro Platform/Commerce/CRM support
   - Detection Logic: oro/ packages in composer.json
@@ -462,12 +476,14 @@
   - Services: WebSocket, consumer, Elasticsearch
   - JSON Schemas: Reference to schemas/ directory
   - Communication Protocol: JSON stdin/stdout, stderr logging
-- [ ] 9.11 Test JSON communication for each command
-  - Test install with valid JSON input
-  - Test install with invalid JSON (schema validation error)
+- [ ] 9.11 Test hybrid JSON communication for each command
+  - Test install with DCX_CONTEXT + stdin JSON
+  - Test install without DCX_CONTEXT (uses defaults)
+  - Test install with invalid stdin JSON (schema validation error)
   - Test platformupdate with options
   - Test updateurl with custom URLs
   - Test tests command with different test suites
+  - Test context fields are accessible in commands
 - [ ] 9.12 Test command auto-registration
   - Verify all commands/ subdirectories are discovered
   - Verify run.sh validation (exists + executable)

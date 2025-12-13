@@ -1557,8 +1557,9 @@ plugin_compose_files() {
 
 set -euo pipefail
 
-# JSON stdin/stdout communication protocol
-# Input: JSON via stdin
+# Hybrid JSON communication protocol
+# Context: JSON via $DCX_CONTEXT environment variable (shared, immutable)
+# Input: JSON via stdin (command-specific data)
 # Output: JSON via stdout
 # Logs: stderr (for debugging)
 
@@ -1596,13 +1597,36 @@ error_result() {
 }
 
 main() {
-  # Read and parse JSON input from stdin
+  # 1. Read shared context from environment (optional)
+  local context="${DCX_CONTEXT:-{}}"
+  log_json "Context" "$context"
+  
+  # Extract context info
+  local dcx_version config_dir
+  dcx_version=$(echo "$context" | jq -r '.dcx.version // "unknown"')
+  config_dir=$(echo "$context" | jq -r '.paths.config_dir // "~/.dcx"')
+  
+  log "DCX version: ${dcx_version}, Config dir: ${config_dir}"
+  
+  # 2. Read command-specific input from stdin
   local input
   input=$(cat)
   
+  # Validate input exists
+  if [[ -z "${input}" || "${input}" == "{}" ]]; then
+    error_result "No input provided via stdin" 1
+    exit 1
+  fi
+  
   log_json "Input received" "$input"
   
-  # Extract data using jq
+  # Validate JSON structure
+  if ! validate_json "$input" "${SCHEMA_DIR}/oro/install-input.schema.json"; then
+    error_result "Invalid input JSON" 1
+    exit 1
+  fi
+  
+  # 3. Extract command-specific data using jq
   local project database admin
   project=$(echo "$input" | jq -r '.project.name')
   database=$(echo "$input" | jq -r '.database.host')
@@ -1610,7 +1634,7 @@ main() {
   
   log "Installing Oro Platform for project: ${project}"
   
-  # Execute installation
+  # 4. Execute installation
   if docker compose exec -T cli composer install --no-interaction; then
     log "Composer install completed"
     
@@ -1646,6 +1670,34 @@ main "$@"
 ## When Called
 - User runs: `dcx install`
 - Triggered after: `dcx up -d` (first time setup)
+
+## Context Schema (Optional)
+JSON structure from DCX_CONTEXT environment variable:
+
+```json
+{
+  "dcx": {
+    "version": "1.0.0",
+    "plugin": "oro",
+    "mode": "default"
+  },
+  "paths": {
+    "project_root": "/home/user/myproject",
+    "config_dir": "/home/user/.dcx/myproject",
+    "compose_dir": "/usr/local/share/dcx/compose"
+  },
+  "state": {
+    "containers_running": true,
+    "database_initialized": false
+  }
+}
+```
+
+**Schema file**: `schemas/core/context.schema.json`
+
+**Purpose**: Shared context set once by dcx core, available to all commands.
+
+**Usage in command**: Commands can access context but should work without it (use defaults).
 
 ## Input Schema
 JSON structure passed via stdin:
@@ -1726,6 +1778,13 @@ All debug information goes to stderr:
 
 ### Basic installation
 ```bash
+# Set context once (optional, dcx core sets it)
+export DCX_CONTEXT='{
+  "dcx": {"version": "1.0.0", "plugin": "oro"},
+  "paths": {"config_dir": "/home/user/.dcx/myapp"}
+}'
+
+# Pipe command-specific data
 echo '{
   "project": {"name": "myapp", "path": "/var/www/html"},
   "database": {"schema": "pgsql", "host": "db", "port": 5432}
@@ -1734,6 +1793,7 @@ echo '{
 
 ### With custom admin credentials
 ```bash
+# Context already set by dcx core
 echo '{
   "project": {"name": "myapp", "path": "/var/www/html"},
   "database": {"schema": "pgsql", "host": "db", "port": 5432},
@@ -1747,9 +1807,21 @@ echo '{
 }' | dcx install 2>>install.log
 ```
 
+### Using fixtures
+```bash
+# Load from file
+cat fixtures/install-config.json | dcx install
+
+# Or with context
+export DCX_CONTEXT=$(cat fixtures/context.json)
+cat fixtures/install-config.json | dcx install
+```
+
 ### Testing with jq
 ```bash
-result=$(echo '{"project": {...}}' | dcx install)
+export DCX_CONTEXT='{"dcx": {"version": "1.0.0"}}'
+
+result=$(echo '{"project": {"name": "test"}, "database": {...}}' | dcx install)
 status=$(echo "$result" | jq -r '.status')
 
 if [ "$status" = "success" ]; then
@@ -1759,6 +1831,12 @@ else
   echo "Installation failed!"
   echo "$result" | jq '.errors'
 fi
+```
+
+### Chaining commands (pipes work!)
+```bash
+# Config generation feeds into install
+dcx config generate | dcx install
 ```
 
 ## Error Handling
@@ -1825,17 +1903,49 @@ export DCX_PLUGIN=oro  # Force Oro plugin
 
 All communication between dcx core and plugins SHALL use structured JSON via stdin/stdout, with logs going to stderr.
 
-**Why JSON over Environment Variables:**
-1. **Debuggability** - Can log entire JSON structure to stderr for troubleshooting
-2. **Testability** - Each module can be unit-tested with JSON fixtures
-3. **Type Safety** - JSON Schema validates structure and types
-4. **Complexity** - Handles nested structures, arrays, complex data
-5. **Dependencies** - jq already required, no new dependencies
+**Why Hybrid Approach (stdin + ENV):**
+
+**Primary: JSON via stdin**
+1. **Clean Interface** - Standard Unix pipe pattern
+2. **Command-Specific Data** - Each command gets its unique data
+3. **No Duplication** - Don't repeat context in every command
+4. **Easy Piping** - Can chain commands: `dcx config | dcx install`
+
+**Secondary: JSON context via ENV**
+5. **Shared Context** - Set once, used by all commands
+6. **Performance** - No need to pass context JSON repeatedly
+7. **Immutable State** - Context doesn't change during execution
+8. **Debuggability** - Log both stdin JSON and context JSON to stderr
+
+**Common Benefits:**
+- ✅ **Structured Data** - Complex nested structures via JSON
+- ✅ **Type Safety** - jq-based validation for both
+- ✅ **No Dependencies** - jq only, no additional tools
+- ✅ **Testability** - Easy to test with fixtures
+- ✅ **Stdout Free** - stdout reserved for JSON result
 
 **Communication Protocol:**
 
 ```bash
-# Core invokes plugin command
+# 1. Core sets shared context (once per dcx invocation)
+export DCX_CONTEXT='{
+  "dcx": {
+    "version": "1.0.0",
+    "plugin": "oro",
+    "mode": "default"
+  },
+  "paths": {
+    "project_root": "/home/user/myproject",
+    "config_dir": "/home/user/.dcx/myproject",
+    "compose_dir": "/usr/local/share/dcx/compose"
+  },
+  "state": {
+    "containers_running": true,
+    "database_initialized": false
+  }
+}'
+
+# 2. Core builds command-specific JSON input
 echo '{
   "project": {
     "name": "myapp",
@@ -1859,7 +1969,7 @@ echo '{
   }
 }' | plugins/oro/commands/install/run.sh 2>>install.log
 
-# Command returns structured result
+# Command returns structured result via stdout
 {
   "status": "success",
   "message": "Installation completed",
@@ -1872,6 +1982,20 @@ echo '{
   "errors": []
 }
 ```
+
+**What goes where:**
+
+**DCX_CONTEXT (ENV)** - Shared context, set once:
+- dcx version, plugin name, mode
+- File paths (project root, config dir, compose dir)
+- Current state (containers running, database status)
+- User info, system info
+
+**stdin JSON** - Command-specific data:
+- Command arguments and options
+- Project configuration for this command
+- Database credentials
+- Framework-specific settings
 
 **Standard Result Format:**
 ```json
@@ -1889,9 +2013,10 @@ echo '{
 }
 ```
 
-**Logging via stderr:**
+**Reading from ENV and Logging via stderr:**
 ```bash
 #!/usr/bin/env bash
+# Read JSON from environment variable
 # All logs go to stderr, results to stdout
 
 log() {
@@ -1906,8 +2031,12 @@ log_json() {
 }
 
 # Usage
+input="${DCX_INPUT}"
 log "Starting installation..."
 log_json "Input received" "$input"
+
+# Parse JSON with jq
+project=$(echo "$input" | jq -r '.project.name')
 
 # Result goes to stdout only
 jq -n '{status: "success", message: "Done"}'
@@ -1982,39 +2111,62 @@ schemas/
 }
 ```
 
-**Validation in Scripts:**
+**Validation with jq (no additional dependencies):**
 ```bash
 #!/usr/bin/env bash
 
-# Validate input against schema
-validate_input() {
-  local input="$1"
+# Validate JSON structure using jq
+validate_json() {
+  local json="$1"
   local schema_file="$2"
   
-  if ! echo "$input" | ajv validate -s "$schema_file" -d @; then
-    error_result "Invalid input: schema validation failed" 1
-    exit 1
+  # 1. Check JSON syntax is valid
+  if ! echo "$json" | jq empty 2>/dev/null; then
+    log "ERROR: Invalid JSON syntax"
+    return 1
   fi
-}
-
-# Validate output before returning
-validate_output() {
-  local output="$1"
-  local schema_file="$2"
   
-  if ! echo "$output" | ajv validate -s "$schema_file" -d @; then
-    log "WARNING: Output doesn't match schema"
-  fi
+  # 2. Check required fields exist
+  local required_fields=$(jq -r '.required[]? // empty' "$schema_file" 2>/dev/null)
+  for field in $required_fields; do
+    # Handle nested fields (e.g., "project.name")
+    if ! echo "$json" | jq -e ".${field}" >/dev/null 2>&1; then
+      log "ERROR: Missing required field: ${field}"
+      return 1
+    fi
+  done
+  
+  # 3. Check field types (basic validation)
+  # Extract property types from schema and validate
+  local properties=$(jq -r '.properties | keys[]' "$schema_file" 2>/dev/null)
+  for prop in $properties; do
+    local expected_type=$(jq -r ".properties.${prop}.type // empty" "$schema_file")
+    
+    if [[ -n "$expected_type" ]] && echo "$json" | jq -e ".${prop}" >/dev/null 2>&1; then
+      local actual_type=$(echo "$json" | jq -r ".${prop} | type")
+      
+      if [[ "$expected_type" != "$actual_type" ]]; then
+        log "ERROR: Field '${prop}' expected type '${expected_type}', got '${actual_type}'"
+        return 1
+      fi
+    fi
+  done
+  
+  log "JSON validation passed"
+  return 0
 }
 
-# Usage
-input=$(cat)
-validate_input "$input" "${SCHEMA_DIR}/oro/install-input.schema.json"
+# Usage in command script
+input="${DCX_INPUT}"
+validate_json "$input" "${SCHEMA_DIR}/oro/install-input.schema.json" || {
+  error_result "Schema validation failed" 1
+  exit 1
+}
 
 # ... do work ...
 
 result=$(success_result "Installation completed" '{...}')
-validate_output "$result" "${SCHEMA_DIR}/core/command-result.schema.json"
+validate_json "$result" "${SCHEMA_DIR}/core/command-result.schema.json"
 echo "$result"
 ```
 
@@ -2022,6 +2174,13 @@ echo "$result"
 ```bash
 # Unit test with bats
 @test "install command succeeds with valid input" {
+  # Set shared context
+  export DCX_CONTEXT='{
+    "dcx": {"version": "1.0.0", "plugin": "oro"},
+    "paths": {"config_dir": "/tmp/test/.dcx"}
+  }'
+  
+  # Pipe command-specific data
   result=$(echo '{
     "project": {"name": "test", "path": "/tmp/test"},
     "database": {"schema": "pgsql", "host": "db", "port": 5432}
@@ -2032,12 +2191,54 @@ echo "$result"
 }
 
 @test "install command fails with invalid input" {
+  export DCX_CONTEXT='{"dcx": {"version": "1.0.0"}}'
+  
   run bash -c 'echo "{}" | plugins/oro/commands/install/run.sh'
   [ "$status" -eq 1 ]
   
-  result="${output}"
-  error_status=$(echo "$result" | jq -r '.status')
+  error_status=$(echo "$output" | jq -r '.status')
   [ "$error_status" = "error" ]
+}
+
+@test "install command fails with empty stdin" {
+  export DCX_CONTEXT='{"dcx": {"version": "1.0.0"}}'
+  
+  run bash -c 'echo "" | plugins/oro/commands/install/run.sh'
+  [ "$status" -eq 1 ]
+  
+  error_msg=$(echo "$output" | jq -r '.message')
+  [[ "$error_msg" == *"No input provided"* ]]
+}
+
+@test "install works without context" {
+  unset DCX_CONTEXT
+  
+  result=$(echo '{
+    "project": {"name": "test", "path": "/tmp/test"},
+    "database": {"schema": "pgsql", "host": "db", "port": 5432}
+  }' | plugins/oro/commands/install/run.sh)
+  
+  status=$(echo "$result" | jq -r '.status')
+  [ "$status" = "success" ]
+}
+
+# Load fixtures from files
+@test "install with fixture files" {
+  export DCX_CONTEXT=$(cat test/fixtures/context.json)
+  
+  result=$(cat test/fixtures/install-valid.json | plugins/oro/commands/install/run.sh)
+  status=$(echo "$result" | jq -r '.status')
+  [ "$status" = "success" ]
+}
+
+# Test context usage
+@test "command uses context config_dir" {
+  export DCX_CONTEXT='{"paths": {"config_dir": "/custom/path"}}'
+  
+  result=$(echo '{"project": {...}}' | plugins/oro/commands/install/run.sh 2>&1)
+  
+  # Check stderr logs mention config dir
+  [[ "$result" == *"/custom/path"* ]]
 }
 ```
 

@@ -270,15 +270,28 @@ The system SHALL require comprehensive documentation for every plugin command th
 - **AND** examples SHALL be copy-paste ready
 - **AND** examples SHALL include both input and expected output
 
-### Requirement: JSON Communication Protocol (stdin/stdout)
-The system SHALL use structured JSON for all communication between core and plugins, with logging via stderr.
+### Requirement: Hybrid JSON Communication Protocol (stdin + ENV)
+The system SHALL use structured JSON for all communication between core and plugins: command-specific data via stdin, shared context via environment variable.
 
-#### Scenario: JSON input via stdin
+#### Scenario: Shared context via DCX_CONTEXT environment variable
+- **WHEN** dcx core initializes
+- **THEN** it SHALL export DCX_CONTEXT environment variable with JSON
+- **AND** context SHALL contain shared immutable data:
+  - dcx.version: DCX version
+  - dcx.plugin: Active plugin name
+  - dcx.mode: Sync mode (default/mutagen/ssh)
+  - paths.*: File paths (config_dir, project_root, compose_dir)
+  - state.*: Current state (containers_running, database_initialized)
+- **AND** context SHALL be available to all plugin commands
+- **AND** context SHALL NOT change during execution
+
+#### Scenario: Command-specific data via stdin
 - **WHEN** command script (run.sh) executes
 - **THEN** it SHALL receive JSON data via stdin
-- **AND** JSON SHALL contain all required configuration
+- **AND** JSON SHALL contain command-specific configuration
 - **AND** JSON SHALL follow documented schema for that command
 - **AND** input SHALL be validated against JSON Schema before processing
+- **AND** stdin data SHALL NOT duplicate context information
 
 #### Scenario: JSON output via stdout
 - **WHEN** command script completes
@@ -313,6 +326,21 @@ The system SHALL use structured JSON for all communication between core and plug
 - **AND** exit_code field SHALL match script exit code
 - **AND** errors array SHALL contain error descriptions
 - **AND** script SHALL exit with non-zero code
+
+#### Scenario: Reading context in command
+- **WHEN** command script reads DCX_CONTEXT
+- **THEN** it SHALL parse JSON from environment variable
+- **AND** if DCX_CONTEXT is empty, it SHALL default to empty object {}
+- **AND** it SHALL extract context fields using jq
+- **AND** missing context fields SHALL use sensible defaults
+- **AND** context SHALL be logged to stderr for debugging
+
+#### Scenario: Context is optional
+- **WHEN** DCX_CONTEXT is not set or empty
+- **THEN** command SHALL still function correctly
+- **AND** command SHALL use default values for context fields
+- **AND** command SHALL NOT fail due to missing context
+- **AND** this SHALL allow testing commands without full context
 
 ### Requirement: JSON Schema Validation
 The system SHALL validate all JSON input and output against documented JSON Schema files.

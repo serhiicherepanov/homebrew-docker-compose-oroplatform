@@ -216,73 +216,146 @@ The system SHALL require comprehensive documentation for every plugin command th
 - **WHEN** command is created
 - **THEN** commands/{name}/README.md SHALL contain sections:
   1. "When Called": Trigger conditions and usage context
-  2. "Available Environment Variables": List of all accessible variables
-  3. "Expected Behavior": What the command does step-by-step
-  4. "Usage Examples": At least 2 practical examples
+  2. "Input Schema": JSON structure with required/optional fields
+  3. "Output Schema": JSON result structure
+  4. "Expected Behavior": What the command does step-by-step
+  5. "Logging": What gets logged to stderr
+  6. "Usage Examples": At least 2 practical examples
+  7. "Error Handling": Error conditions and result format
 - **AND** all sections SHALL be present and non-empty
 
-#### Scenario: Document available environment variables
-- **WHEN** command README documents variables
-- **THEN** it SHALL list Core Variables (from dcx core)
-- **AND** it SHALL list Plugin Variables (from plugin env/defaults.sh)
-- **AND** each variable SHALL include:
-  - Variable name (DC_*)
-  - Description
-  - Default value (if applicable)
-  - Example value
+#### Scenario: Document input JSON schema
+- **WHEN** command README documents input
+- **THEN** it SHALL show example JSON structure
+- **AND** it SHALL reference schema file path
+- **AND** it SHALL list required fields with types
+- **AND** it SHALL list optional fields with defaults
+- **AND** it SHALL include field descriptions
+- **AND** it SHALL show valid enum values where applicable
+
+#### Scenario: Document output JSON schema
+- **WHEN** command README documents output
+- **THEN** it SHALL show example result JSON
+- **AND** it SHALL reference schema file path
+- **AND** it SHALL document status field values
+- **AND** it SHALL document data structure contents
+- **AND** it SHALL show success and error examples
 
 #### Scenario: Document command behavior
 - **WHEN** command README documents behavior
 - **THEN** it SHALL describe:
   - Prerequisites (what must be running)
   - Step-by-step execution flow
-  - Expected output and exit codes
+  - Exit codes and their meanings
   - Error conditions and handling
 - **AND** behavior SHALL match actual run.sh implementation
+
+#### Scenario: Document logging strategy
+- **WHEN** command README documents logging
+- **THEN** it SHALL explain what goes to stderr:
+  - Input JSON (for debugging)
+  - Execution steps
+  - Command outputs
+  - Error details
+- **AND** it SHALL note that stdout is reserved for JSON result
 
 #### Scenario: Document usage examples
 - **WHEN** command README provides examples
 - **THEN** it SHALL include:
-  - Basic usage (minimal command)
-  - Advanced usage (with environment overrides)
-  - Common use cases
-  - Error scenarios (if applicable)
+  - Basic usage (minimal JSON input)
+  - Advanced usage (with all optional fields)
+  - Result parsing with jq
+  - Error handling
+  - Testing examples
 - **AND** examples SHALL be copy-paste ready
+- **AND** examples SHALL include both input and expected output
 
-### Requirement: Command Script Communication via Environment Variables
-The system SHALL pass all data to command scripts exclusively through environment variables, ensuring loose coupling.
+### Requirement: JSON Communication Protocol (stdin/stdout)
+The system SHALL use structured JSON for all communication between core and plugins, with logging via stderr.
 
-#### Scenario: Environment variable availability
+#### Scenario: JSON input via stdin
 - **WHEN** command script (run.sh) executes
-- **THEN** it SHALL have access to all DC_* core variables
-- **AND** it SHALL have access to all plugin-specific variables from env/defaults.sh
-- **AND** it SHALL have access to user overrides from .env.dcx
-- **AND** it SHALL NOT receive arguments (use env vars instead)
+- **THEN** it SHALL receive JSON data via stdin
+- **AND** JSON SHALL contain all required configuration
+- **AND** JSON SHALL follow documented schema for that command
+- **AND** input SHALL be validated against JSON Schema before processing
 
-#### Scenario: No tight coupling through arguments
-- **WHEN** executing command script
-- **THEN** dcx core SHALL NOT pass data via script arguments
-- **AND** dcx core SHALL NOT pass data via stdin
-- **AND** dcx core SHALL only use environment variable export
-- **AND** this SHALL ensure plugin independence
+#### Scenario: JSON output via stdout
+- **WHEN** command script completes
+- **THEN** it SHALL return JSON result via stdout
+- **AND** JSON SHALL contain status, message, data fields
+- **AND** JSON SHALL follow standard result schema
+- **AND** output SHALL be validated against JSON Schema
 
-#### Scenario: Standard environment variables for all commands
-- **WHEN** any command script executes
-- **THEN** these core variables SHALL be available:
-  - DC_PROJECT_NAME: Project name
-  - DC_MODE: Sync mode (default/mutagen/ssh)
-  - DC_PHP_VERSION: PHP version
-  - DC_NODE_VERSION: Node.js version
-  - DC_DATABASE_*: All database configuration
-  - DC_CONFIG_DIR: Configuration directory path
-- **AND** variables SHALL be validated before script execution
+#### Scenario: Logging via stderr
+- **WHEN** command script executes
+- **THEN** all debug logs SHALL go to stderr
+- **AND** input JSON SHALL be logged to stderr for debugging
+- **AND** execution steps SHALL be logged to stderr
+- **AND** stderr logs SHALL NOT interfere with stdout JSON result
 
-#### Scenario: Plugin-specific environment variables
-- **WHEN** plugin command executes
-- **THEN** plugin env/defaults.sh SHALL be sourced first
-- **AND** plugin variables SHALL NOT conflict with core variables
-- **AND** plugin variables SHALL use DC_{PLUGIN_NAME}_* prefix
-- **AND** example: DC_ORO_ADMIN_USER, DC_ORO_ORG_NAME for Oro plugin
+#### Scenario: Standard result format
+- **WHEN** command returns result
+- **THEN** JSON SHALL contain required fields:
+  - status: "success" or "error"
+  - message: human-readable message
+  - data: command-specific result data
+- **AND** JSON MAY contain optional fields:
+  - exit_code: integer exit code (default 0)
+  - warnings: array of warning messages
+  - errors: array of error messages
+  - metadata: additional metadata (duration, timestamp)
+
+#### Scenario: Error result format
+- **WHEN** command fails
+- **THEN** it SHALL return error result via stdout
+- **AND** status field SHALL be "error"
+- **AND** exit_code field SHALL match script exit code
+- **AND** errors array SHALL contain error descriptions
+- **AND** script SHALL exit with non-zero code
+
+### Requirement: JSON Schema Validation
+The system SHALL validate all JSON input and output against documented JSON Schema files.
+
+#### Scenario: Schema file structure
+- **WHEN** plugin is created
+- **THEN** it SHALL have schemas/ directory
+- **AND** schemas SHALL be organized by command:
+  - schemas/plugins/{plugin}/{ command}-input.schema.json
+  - schemas/plugins/{plugin}/{command}-output.schema.json
+- **AND** core SHALL provide common schemas:
+  - schemas/core/command-result.schema.json
+  - schemas/core/project-config.schema.json
+  - schemas/core/database-config.schema.json
+
+#### Scenario: Input validation before execution
+- **WHEN** command script receives JSON input
+- **THEN** it SHALL validate against input schema first
+- **AND** if validation fails, it SHALL return error without executing
+- **AND** error SHALL indicate which fields failed validation
+- **AND** validation SHALL use ajv-cli or jq for checking
+
+#### Scenario: Output validation before returning
+- **WHEN** command prepares result JSON
+- **THEN** it SHOULD validate against output schema
+- **AND** if validation fails, it SHOULD log warning to stderr
+- **AND** it SHALL still return result (validation is advisory)
+- **AND** validation helps catch schema drift during development
+
+#### Scenario: Schema documentation in README
+- **WHEN** command README.md is written
+- **THEN** it SHALL document input schema with example
+- **AND** it SHALL document output schema with example
+- **AND** it SHALL list required vs optional fields
+- **AND** it SHALL reference schema file path
+
+#### Scenario: JSON Schema format
+- **WHEN** writing schema files
+- **THEN** they SHALL use JSON Schema Draft 7 format
+- **AND** they SHALL include $schema and $id fields
+- **AND** they SHALL define types, required fields, constraints
+- **AND** they SHALL include human-readable descriptions
+- **AND** they SHALL include examples where helpful
 
 ### Requirement: Plugin Auto-Registration from Directory Structure
 The system SHALL automatically discover and register plugin commands from the commands/ directory structure.

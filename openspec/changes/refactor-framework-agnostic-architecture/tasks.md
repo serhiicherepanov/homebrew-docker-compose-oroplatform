@@ -276,12 +276,51 @@
 - [ ] 9.3 Implement database export (from tasks 8.4-8.5)
 - [ ] 9.4-9.8 (keep existing database tasks)
 
-## 8. Plugin System (Fixed Structure Convention)
+## 7a. JSON Communication Protocol
+- [ ] 7a.1 Design JSON communication protocol (stdin/stdout)
+  - Input: JSON via stdin
+  - Output: JSON via stdout
+  - Logs: stderr (debug, execution steps)
+- [ ] 7a.2 Create JSON helper functions in bin/dcx.d/45-json-helpers.sh
+  - log() - log to stderr with timestamp
+  - log_json() - pretty-print JSON to stderr with colors
+  - success_result() - generate success JSON
+  - error_result() - generate error JSON
+  - validate_json() - validate JSON against schema
+- [ ] 7a.3 Define standard result JSON format
+  - status: "success" | "error"
+  - message: human-readable message
+  - exit_code: integer (0 for success)
+  - data: command-specific result
+  - warnings: array of warnings
+  - errors: array of errors
+  - metadata: optional (duration, timestamp)
+- [ ] 7a.4 Create schemas/core/ directory with core schemas
+  - command-result.schema.json (standard result format)
+  - project-config.schema.json (project configuration)
+  - database-config.schema.json (database configuration)
+- [ ] 7a.5 Implement JSON validation function
+  - Use ajv-cli if available (strict validation)
+  - Fallback to jq for basic validation
+  - Validate before executing command (input)
+  - Validate before returning result (output, advisory)
+- [ ] 7a.6 Add JSON Schema to dependencies
+  - Document ajv-cli requirement (npm install -g ajv-cli)
+  - Provide installation instructions
+  - Optional but recommended for development
+- [ ] 7a.7 Write tests for JSON helpers
+  - Test success_result() format
+  - Test error_result() format
+  - Test log_json() output
+  - Test validation with valid/invalid JSON
+
+## 8. Plugin System (Fixed Structure Convention + JSON)
 - [ ] 8.1 Create bin/dcx.d/50-plugin-loader.sh
 - [ ] 8.2 Design fixed plugin directory structure convention
-  - REQUIRED: README.md, plugin.sh, commands/, services/, env/
+  - REQUIRED: README.md, plugin.sh, commands/, services/, schemas/
   - REQUIRED: Each command has directory with run.sh + README.md
-  - REQUIRED: All data via environment variables (no arguments)
+  - REQUIRED: All data via JSON stdin/stdout (no arguments, no env vars for data)
+  - REQUIRED: Each command has input/output JSON Schema files
 - [ ] 8.3 Implement plugin interface (plugin_detect, plugin_init, etc.)
   - plugin_detect() → bool (return 0 if framework detected)
   - plugin_name() → string (return plugin name)
@@ -303,15 +342,17 @@
   - Store commands in associative array
   - Lookup command by name when executing
   - Route execution to correct plugin script
-- [ ] 8.7 Implement plugin compose file loading
+- [ ] 8.7 Implement JSON payload construction for plugin commands
+  - Gather core configuration (project, database, etc.)
+  - Add plugin-specific configuration (from defaults)
+  - Merge user overrides (.env.dcx)
+  - Build complete JSON object
+  - Validate against command input schema
+- [ ] 8.8 Implement plugin compose file loading
   - Load base compose files first
   - Then load mode-specific compose (default/mutagen/ssh)
   - Then load core service compose files
   - Finally load plugin service compose files from services/
-- [ ] 8.8 Add plugin environment variable loading
-  - Source env/defaults.sh before command execution
-  - Validate no conflicts with core DC_* variables
-  - Export all variables to command script environment
 - [ ] 8.9 Implement command README.md validation
   - Check for required sections: When Called, Available Variables, Expected Behavior, Usage Examples
   - Warn if sections missing
@@ -322,23 +363,37 @@
   - Test invalid directory structure
 - [ ] 8.11 Test plugin isolation (core works without plugins)
 - [ ] 8.12 Test plugin loading and unloading
-- [ ] 8.13 Test command execution with environment variables
-  - Verify all DC_* variables passed
-  - Verify plugin variables from env/defaults.sh passed
-  - Verify user overrides from .env.dcx passed
-- [ ] 8.14 Document plugin structure convention
+- [ ] 8.13 Test command execution with JSON I/O
+  - Verify JSON passed to stdin correctly
+  - Verify stdout contains valid JSON result
+  - Verify stderr contains logs only
+  - Verify exit codes match JSON exit_code field
+- [ ] 8.14 Test JSON payload construction
+  - Verify core config included (project, database)
+  - Verify plugin defaults merged
+  - Verify user overrides from .env.dcx applied
+  - Verify final JSON validates against schema
+- [ ] 8.15 Document plugin structure convention
   - Create PLUGIN_DEVELOPMENT.md guide
   - Example plugin template
   - Fixed structure requirements
   - README.md template for commands
+  - JSON Schema template
+  - JSON communication protocol
+- [ ] 8.16 Create example/template plugin
+  - plugins/example/ with complete structure
+  - Example command with JSON I/O
+  - Example schemas
+  - Comprehensive documentation
+  - Can be copied for new plugins
 
-## 9. Oro Plugin (Fixed Structure)
+## 9. Oro Plugin (Fixed Structure + JSON)
 - [ ] 9.1 Create plugins/oro directory structure (FIXED convention)
   - plugins/oro/README.md (plugin overview)
   - plugins/oro/plugin.sh (detection and init)
   - plugins/oro/commands/ (command directories)
   - plugins/oro/services/ (Docker Compose services)
-  - plugins/oro/env/ (environment variables)
+  - plugins/oro/schemas/ (JSON Schema files)
 - [ ] 9.2 Create plugins/oro/plugin.sh
   - Implement plugin_detect() - check for oro/ packages in composer.json
   - Implement plugin_name() - return "oro"
@@ -353,49 +408,96 @@
   - plugins/oro/services/websocket.yml
   - plugins/oro/services/consumer.yml
   - plugins/oro/services/elasticsearch.yml
-- [ ] 9.5 Create command: install
-  - plugins/oro/commands/install/run.sh (installation script)
-  - plugins/oro/commands/install/README.md (documentation)
+- [ ] 9.5 Create JSON schemas for commands
+  - plugins/oro/schemas/install-input.schema.json
+  - plugins/oro/schemas/install-output.schema.json
+  - plugins/oro/schemas/platformupdate-input.schema.json
+  - plugins/oro/schemas/platformupdate-output.schema.json
+  - plugins/oro/schemas/updateurl-input.schema.json
+  - plugins/oro/schemas/updateurl-output.schema.json
+  - plugins/oro/schemas/tests-input.schema.json
+  - plugins/oro/schemas/tests-output.schema.json
+- [ ] 9.6 Create command: install (with JSON I/O)
+  - plugins/oro/commands/install/run.sh (installation script with JSON)
+    - Read JSON from stdin (project, database, oro config)
+    - Validate input against install-input.schema.json
+    - Log execution to stderr (input JSON, steps, outputs)
+    - Return success/error JSON to stdout
+  - plugins/oro/commands/install/README.md (JSON documentation)
     - When Called: dcx install, after dcx up -d
-    - Available Variables: DC_*, DC_ORO_*
+    - Input Schema: JSON structure with project, database, oro fields
+    - Output Schema: success/error result with installation details
     - Expected Behavior: composer install + oro:install
-    - Usage Examples: basic and with custom credentials
-- [ ] 9.6 Create command: platformupdate
-  - plugins/oro/commands/platformupdate/run.sh (update script)
-  - plugins/oro/commands/platformupdate/README.md
+    - Logging: What goes to stderr
+    - Usage Examples: basic JSON, advanced JSON, jq parsing
+    - Error Handling: error JSON format
+- [ ] 9.7 Create command: platformupdate (with JSON I/O)
+  - plugins/oro/commands/platformupdate/run.sh (update script with JSON)
+  - plugins/oro/commands/platformupdate/README.md (JSON documentation)
     - When Called: dcx platformupdate, after database import
-    - Available Variables: DC_*, DC_ORO_*
+    - Input Schema: JSON with project, options (skip-assets, force)
+    - Output Schema: success/error with update details
     - Expected Behavior: oro:platform:update
-    - Usage Examples: basic update, with assets rebuild
-- [ ] 9.7 Create command: updateurl
-  - plugins/oro/commands/updateurl/run.sh (URL update script)
-  - plugins/oro/commands/updateurl/README.md
+    - Usage Examples: basic update, with options, result parsing
+- [ ] 9.8 Create command: updateurl (with JSON I/O)
+  - plugins/oro/commands/updateurl/run.sh (URL update script with JSON)
+  - plugins/oro/commands/updateurl/README.md (JSON documentation)
     - When Called: dcx updateurl, after environment change
-    - Available Variables: DC_PROJECT_NAME, DC_ORO_APP_URL
-    - Expected Behavior: Update oro_config_value URLs
-    - Usage Examples: local development, custom domain
-- [ ] 9.8 Create command: tests
-  - plugins/oro/commands/tests/run.sh (test environment script)
-  - plugins/oro/commands/tests/README.md
+    - Input Schema: JSON with project.name, urls.base, urls.secure
+    - Output Schema: success/error with updated URLs
+    - Expected Behavior: Update oro_config_value URLs via SQL
+    - Usage Examples: local dev URLs, custom domain
+- [ ] 9.9 Create command: tests (with JSON I/O)
+  - plugins/oro/commands/tests/run.sh (test environment script with JSON)
+  - plugins/oro/commands/tests/README.md (JSON documentation)
     - When Called: dcx tests [command]
-    - Available Variables: DC_*, test-specific overrides
-    - Expected Behavior: Isolated test environment
-    - Usage Examples: bin/phpunit, bin/behat
-- [ ] 9.9 Create plugins/oro/README.md (plugin documentation)
+    - Input Schema: JSON with test.command, test.args, test.env
+    - Output Schema: success/error with test results
+    - Expected Behavior: Isolated test environment execution
+    - Usage Examples: phpunit, behat, with custom args
+- [ ] 9.10 Create plugins/oro/README.md (plugin documentation)
   - Plugin Overview: Oro Platform/Commerce/CRM support
   - Detection Logic: oro/ packages in composer.json
   - Commands: List all commands with links to README
   - Services: WebSocket, consumer, Elasticsearch
-  - Environment Variables: DC_ORO_* variables reference
-- [ ] 9.10 Test command auto-registration
+  - JSON Schemas: Reference to schemas/ directory
+  - Communication Protocol: JSON stdin/stdout, stderr logging
+- [ ] 9.11 Test JSON communication for each command
+  - Test install with valid JSON input
+  - Test install with invalid JSON (schema validation error)
+  - Test platformupdate with options
+  - Test updateurl with custom URLs
+  - Test tests command with different test suites
+- [ ] 9.12 Test command auto-registration
   - Verify all commands/ subdirectories are discovered
   - Verify run.sh validation (exists + executable)
   - Verify README.md validation (exists + non-empty)
-- [ ] 9.11 Test Oro plugin with OroCommerce 6.1
-- [ ] 9.12 Test Oro plugin with OroPlatform 6.1
-- [ ] 9.13 Test Oro plugin with OroCRM 6.1
-- [ ] 9.14 Verify core works WITHOUT Oro plugin loaded
-- [ ] 9.15 Document plugin structure for future framework adapters
+  - Verify JSON Schema files exist (input + output)
+- [ ] 9.13 Test JSON Schema validation
+  - Test valid JSON passes schema validation
+  - Test invalid JSON fails schema validation
+  - Test missing required fields detected
+  - Test type mismatches detected
+  - Test enum validation works
+- [ ] 9.14 Test stderr logging
+  - Verify input JSON logged to stderr
+  - Verify execution steps logged
+  - Verify command outputs captured
+  - Verify stderr doesn't interfere with stdout JSON
+- [ ] 9.15 Test Oro plugin with OroCommerce 6.1
+- [ ] 9.16 Test Oro plugin with OroPlatform 6.1
+- [ ] 9.17 Test Oro plugin with OroCRM 6.1
+- [ ] 9.18 Verify core works WITHOUT Oro plugin loaded
+- [ ] 9.19 Write bats tests for Oro commands with JSON fixtures
+  - Create fixtures/ directory with sample JSON inputs
+  - Test each command with fixtures
+  - Validate output JSON structure
+  - Test error conditions
+- [ ] 9.20 Document plugin structure for future framework adapters
+  - JSON communication protocol
+  - Schema file conventions
+  - Logging best practices
+  - Testing approach
 
 ## 10. Core Functionality (No Plugin Required)
 - [ ] 10.1 Verify core works standalone (no plugins)

@@ -1557,25 +1557,83 @@ plugin_compose_files() {
 
 set -euo pipefail
 
-# All data comes from environment variables:
-# - DC_PROJECT_NAME
-# - DC_DATABASE_*
-# - DC_PHP_VERSION
-# - DC_ORO_* (plugin-specific variables from env/defaults.sh)
+# JSON stdin/stdout communication protocol
+# Input: JSON via stdin
+# Output: JSON via stdout
+# Logs: stderr (for debugging)
+
+# Helper: Log to stderr
+log() {
+  echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2
+}
+
+# Helper: Log JSON to stderr for debugging
+log_json() {
+  local label="$1"
+  local json="$2"
+  echo "[DEBUG] ${label}:" >&2
+  echo "${json}" | jq -C . >&2
+}
+
+# Helper: Return success result
+success_result() {
+  local message="$1"
+  local data="${2:-{}}"
+  jq -n \
+    --arg msg "$message" \
+    --argjson data "$data" \
+    '{status: "success", message: $msg, data: $data}'
+}
+
+# Helper: Return error result
+error_result() {
+  local message="$1"
+  local exit_code="${2:-1}"
+  jq -n \
+    --arg msg "$message" \
+    --argjson code "$exit_code" \
+    '{status: "error", message: $msg, exit_code: $code}'
+}
 
 main() {
-  msg_info "Installing Oro Platform..."
+  # Read and parse JSON input from stdin
+  local input
+  input=$(cat)
   
-  # Use variables from environment
-  docker compose exec -T cli composer install --no-interaction
-  docker compose exec -T cli bin/console oro:install \
-    --user-name="${DC_ORO_ADMIN_USER}" \
-    --user-email="${DC_ORO_ADMIN_EMAIL}" \
-    --user-password="${DC_ORO_ADMIN_PASSWORD}" \
-    --organization-name="${DC_ORO_ORG_NAME}" \
-    --application-url="http://${DC_PROJECT_NAME}.docker.local"
+  log_json "Input received" "$input"
   
-  msg_success "Oro Platform installed successfully"
+  # Extract data using jq
+  local project database admin
+  project=$(echo "$input" | jq -r '.project.name')
+  database=$(echo "$input" | jq -r '.database.host')
+  admin=$(echo "$input" | jq -r '.oro.admin.user')
+  
+  log "Installing Oro Platform for project: ${project}"
+  
+  # Execute installation
+  if docker compose exec -T cli composer install --no-interaction; then
+    log "Composer install completed"
+    
+    if docker compose exec -T cli bin/console oro:install \
+      --user-name="${admin}" \
+      --application-url="http://${project}.docker.local"; then
+      
+      log "Oro installation completed successfully"
+      
+      # Return success with structured data
+      success_result "Installation completed" '{
+        "admin_user": "'"${admin}"'",
+        "database_created": true,
+        "services_started": ["fpm", "cli", "nginx"]
+      }'
+    else
+      error_result "Oro installation failed" 1
+      exit 1
+    fi
+  else
+    error_result "Composer install failed" 1
+    exit 1
+  fi
 }
 
 main "$@"
@@ -1589,36 +1647,133 @@ main "$@"
 - User runs: `dcx install`
 - Triggered after: `dcx up -d` (first time setup)
 
-## Available Environment Variables
+## Input Schema
+JSON structure passed via stdin:
 
-### Core Variables (always available)
-- `DC_PROJECT_NAME` - Project name
-- `DC_DATABASE_HOST` - Database host
-- `DC_DATABASE_USER` - Database user
-- `DC_DATABASE_PASSWORD` - Database password
-- `DC_PHP_VERSION` - PHP version
+```json
+{
+  "project": {
+    "name": "myapp",
+    "path": "/var/www/html"
+  },
+  "database": {
+    "schema": "pgsql",
+    "host": "database",
+    "port": 5432,
+    "user": "app",
+    "password": "app",
+    "dbname": "app"
+  },
+  "oro": {
+    "admin": {
+      "user": "admin",
+      "email": "admin@example.com",
+      "password": "secret"
+    },
+    "organization": "ACME Corp"
+  }
+}
+```
 
-### Plugin Variables (from env/defaults.sh)
-- `DC_ORO_ADMIN_USER` - Admin username (default: admin)
-- `DC_ORO_ADMIN_EMAIL` - Admin email
-- `DC_ORO_ADMIN_PASSWORD` - Admin password
-- `DC_ORO_ORG_NAME` - Organization name
+**Schema file**: `schemas/plugins/oro/install-input.schema.json`
+
+**Required fields**:
+- `project.name` (string): Project name
+- `project.path` (string): Project path
+- `database.schema` (enum: pgsql, mysql): Database type
+- `database.host` (string): Database host
+- `database.port` (integer): Database port
+
+**Optional fields**:
+- `oro.admin.*`: Admin user configuration (defaults used if omitted)
+- `oro.organization`: Organization name
+
+## Output Schema
+JSON structure returned via stdout:
+
+```json
+{
+  "status": "success",
+  "message": "Installation completed",
+  "data": {
+    "admin_user": "admin",
+    "database_created": true,
+    "services_started": ["fpm", "cli", "nginx"]
+  },
+  "warnings": [],
+  "errors": []
+}
+```
+
+**Schema file**: `schemas/core/command-result.schema.json`
 
 ## Expected Behavior
-1. Run composer install
-2. Execute oro:install command
-3. Set up admin user
-4. Configure application URL
+1. Validate input JSON against schema
+2. Run composer install
+3. Execute oro:install command
+4. Set up admin user
+5. Configure application URL
+6. Return structured result with status
+
+## Logging
+All debug information goes to stderr:
+- Input JSON (with colors via jq)
+- Execution steps
+- Command outputs
+- Error details
 
 ## Usage Examples
-```bash
-# Basic installation
-dcx install
 
-# With custom admin credentials
-DC_ORO_ADMIN_USER=superadmin \
-DC_ORO_ADMIN_PASSWORD=secret123 \
-dcx install
+### Basic installation
+```bash
+echo '{
+  "project": {"name": "myapp", "path": "/var/www/html"},
+  "database": {"schema": "pgsql", "host": "db", "port": 5432}
+}' | dcx install
+```
+
+### With custom admin credentials
+```bash
+echo '{
+  "project": {"name": "myapp", "path": "/var/www/html"},
+  "database": {"schema": "pgsql", "host": "db", "port": 5432},
+  "oro": {
+    "admin": {
+      "user": "superadmin",
+      "email": "admin@example.com",
+      "password": "secret123"
+    }
+  }
+}' | dcx install 2>>install.log
+```
+
+### Testing with jq
+```bash
+result=$(echo '{"project": {...}}' | dcx install)
+status=$(echo "$result" | jq -r '.status')
+
+if [ "$status" = "success" ]; then
+  echo "Installation successful!"
+  echo "$result" | jq '.data'
+else
+  echo "Installation failed!"
+  echo "$result" | jq '.errors'
+fi
+```
+
+## Error Handling
+If validation or execution fails, returns error result:
+
+```json
+{
+  "status": "error",
+  "message": "Composer install failed",
+  "exit_code": 1,
+  "errors": ["Command failed: composer install"]
+}
+```
+
+Exit code matches `exit_code` field in JSON result.
 ```
 ```
 
@@ -1664,7 +1819,243 @@ export DCX_PLUGIN=oro  # Force Oro plugin
 3. **Configuration file registration**: Less flexible, requires parsing
 4. **Flat command structure**: Hard to document, no organization
 
-### Decision 4: Environment Variable Separation (Core vs Plugin)
+### Decision 4: JSON Communication Protocol (stdin/stdout)
+
+**CRITICAL: All inter-module communication via JSON**
+
+All communication between dcx core and plugins SHALL use structured JSON via stdin/stdout, with logs going to stderr.
+
+**Why JSON over Environment Variables:**
+1. **Debuggability** - Can log entire JSON structure to stderr for troubleshooting
+2. **Testability** - Each module can be unit-tested with JSON fixtures
+3. **Type Safety** - JSON Schema validates structure and types
+4. **Complexity** - Handles nested structures, arrays, complex data
+5. **Dependencies** - jq already required, no new dependencies
+
+**Communication Protocol:**
+
+```bash
+# Core invokes plugin command
+echo '{
+  "project": {
+    "name": "myapp",
+    "path": "/var/www/html"
+  },
+  "database": {
+    "schema": "pgsql",
+    "host": "database",
+    "port": 5432,
+    "user": "app",
+    "password": "app",
+    "dbname": "app"
+  },
+  "oro": {
+    "admin": {
+      "user": "admin",
+      "email": "admin@example.com",
+      "password": "secret"
+    },
+    "organization": "ACME Corp"
+  }
+}' | plugins/oro/commands/install/run.sh 2>>install.log
+
+# Command returns structured result
+{
+  "status": "success",
+  "message": "Installation completed",
+  "data": {
+    "admin_user": "admin",
+    "database_created": true,
+    "services_started": ["fpm", "cli", "nginx", "consumer"]
+  },
+  "warnings": [],
+  "errors": []
+}
+```
+
+**Standard Result Format:**
+```json
+{
+  "status": "success|error",
+  "message": "Human-readable message",
+  "exit_code": 0,
+  "data": {},
+  "warnings": [],
+  "errors": [],
+  "metadata": {
+    "duration_ms": 12345,
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+**Logging via stderr:**
+```bash
+#!/usr/bin/env bash
+# All logs go to stderr, results to stdout
+
+log() {
+  echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2
+}
+
+log_json() {
+  local label="$1"
+  local json="$2"
+  echo "[DEBUG] ${label}:" >&2
+  echo "${json}" | jq -C . >&2  # Color output for readability
+}
+
+# Usage
+log "Starting installation..."
+log_json "Input received" "$input"
+
+# Result goes to stdout only
+jq -n '{status: "success", message: "Done"}'
+```
+
+**JSON Schema Validation:**
+
+Every command SHALL have input/output JSON Schema files:
+
+```
+schemas/
+├── core/
+│   ├── project-config.schema.json
+│   ├── database-config.schema.json
+│   └── command-result.schema.json
+└── plugins/
+    └── oro/
+        ├── install-input.schema.json
+        ├── install-output.schema.json
+        ├── platformupdate-input.schema.json
+        └── platformupdate-output.schema.json
+```
+
+**Example Schema (install-input.schema.json):**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dcx.dev/schemas/oro/install-input.json",
+  "type": "object",
+  "required": ["project", "database"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["name", "path"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "path": {"type": "string"}
+      }
+    },
+    "database": {
+      "type": "object",
+      "required": ["schema", "host", "port"],
+      "properties": {
+        "schema": {"enum": ["pgsql", "mysql"]},
+        "host": {"type": "string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "user": {"type": "string"},
+        "password": {"type": "string"},
+        "dbname": {"type": "string"}
+      }
+    },
+    "oro": {
+      "type": "object",
+      "properties": {
+        "admin": {
+          "type": "object",
+          "required": ["user", "email", "password"],
+          "properties": {
+            "user": {"type": "string"},
+            "email": {"type": "string", "format": "email"},
+            "password": {"type": "string", "minLength": 8}
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Validation in Scripts:**
+```bash
+#!/usr/bin/env bash
+
+# Validate input against schema
+validate_input() {
+  local input="$1"
+  local schema_file="$2"
+  
+  if ! echo "$input" | ajv validate -s "$schema_file" -d @; then
+    error_result "Invalid input: schema validation failed" 1
+    exit 1
+  fi
+}
+
+# Validate output before returning
+validate_output() {
+  local output="$1"
+  local schema_file="$2"
+  
+  if ! echo "$output" | ajv validate -s "$schema_file" -d @; then
+    log "WARNING: Output doesn't match schema"
+  fi
+}
+
+# Usage
+input=$(cat)
+validate_input "$input" "${SCHEMA_DIR}/oro/install-input.schema.json"
+
+# ... do work ...
+
+result=$(success_result "Installation completed" '{...}')
+validate_output "$result" "${SCHEMA_DIR}/core/command-result.schema.json"
+echo "$result"
+```
+
+**Testing Benefits:**
+```bash
+# Unit test with bats
+@test "install command succeeds with valid input" {
+  result=$(echo '{
+    "project": {"name": "test", "path": "/tmp/test"},
+    "database": {"schema": "pgsql", "host": "db", "port": 5432}
+  }' | plugins/oro/commands/install/run.sh)
+  
+  status=$(echo "$result" | jq -r '.status')
+  [ "$status" = "success" ]
+}
+
+@test "install command fails with invalid input" {
+  run bash -c 'echo "{}" | plugins/oro/commands/install/run.sh'
+  [ "$status" -eq 1 ]
+  
+  result="${output}"
+  error_status=$(echo "$result" | jq -r '.status')
+  [ "$error_status" = "error" ]
+}
+```
+
+**Rationale:**
+1. **Debuggability**: stderr logs show exact JSON being passed, easier to troubleshoot than ENV vars
+2. **Testability**: Can mock inputs/outputs with JSON fixtures, perfect for bats tests
+3. **Validation**: JSON Schema catches errors early, prevents invalid data propagation
+4. **Structure**: Complex nested data (arrays, objects) handled naturally
+5. **No new deps**: jq already required, ajv-cli optional for strict validation
+6. **Separation**: stdout = result data, stderr = debug logs (clear separation)
+
+**Alternatives Considered:**
+1. **Environment Variables Only**: Hard to debug, no nested structures, no validation
+2. **ENV in, JSON out**: Inconsistent, still hard to test input validation
+3. **YAML**: Requires yq, less universal than JSON, harder to manipulate in bash
+4. **MessagePack/Protocol Buffers**: Overkill for bash, requires compilation
+
+### Decision 5: Environment Variable Separation (Core vs Plugin)
 
 **Strategy: Minimal core variables + plugin-managed framework variables**
 
@@ -1748,7 +2139,7 @@ export ORO_SECRET=${ORO_SECRET:-ThisTokenIsNotSoSecretChangeIt}
 2. **No core variables**: Too generic, every plugin duplicates basics
 3. **Framework detection in core**: Core shouldn't know about frameworks
 
-### Decision 5: Command Naming
+### Decision 6: Command Naming
 
 **Strategy: Single clean command name**
 - **Command**: `dcx` (framework-agnostic, universal)

@@ -96,155 +96,285 @@ compose/
 
 ## Decisions
 
-### Decision 1: Module Organization
+### Decision 1: Module Organization - Minimalist Core + Plugins
 
 **Structure:**
 ```
 bin/
-├── webstack                              # Main entry point (replaces orodc)
-├── webstack.d/
-│   ├── 00-core.sh                        # Core Docker Compose functions
-│   ├── 10-utils.sh                       # Utility functions (logging, binary resolution)
-│   ├── 20-env.sh                         # Environment initialization
-│   ├── 30-pipeline.sh                    # Command routing and execution
-│   ├── 40-compose.sh                     # Compose file management
-│   ├── 50-infrastructure.sh              # Infrastructure module interface
-│   └── 60-framework.sh                   # Framework adapter loader
-└── webstack-frameworks.d/
-    ├── oro.sh                            # Oro Platform adapter
-    ├── magento.sh                        # Magento adapter (future)
-    └── symfony.sh                        # Symfony adapter (future)
+├── webstack                              # Minimal entry point (~100 lines)
+├── webstack.d/                           # Core modules (no framework logic)
+│   ├── 00-core.sh                        # Docker Compose orchestration
+│   ├── 10-utils.sh                       # Logging, binary resolution
+│   ├── 20-env.sh                         # Core environment only
+│   ├── 30-cli.sh                         # Generic CLI commands
+│   ├── 40-database.sh                    # Database import/export
+│   └── 50-plugin-loader.sh               # Plugin discovery and loading
+│
+├── plugins/                              # Framework plugins (opt-in)
+│   ├── oro/
+│   │   ├── plugin.sh                     # Oro commands and detection
+│   │   ├── env.sh                        # Oro-specific environment
+│   │   └── compose/                      # Oro-specific services
+│   │       ├── websocket.yml
+│   │       ├── consumer.yml
+│   │       └── search.yml
+│   │
+│   └── magento/
+│       ├── plugin.sh
+│       ├── env.sh
+│       └── compose/
+│
+└── compose/                              # Core services only
+    ├── services/                         # One file per service
+    │   ├── nginx.yml                     # Webserver
+    │   ├── php-cli.yml                   # PHP CLI container
+    │   ├── php-fpm.yml                   # PHP FPM container
+    │   ├── database-pgsql.yml            # PostgreSQL
+    │   ├── database-mysql.yml            # MySQL
+    │   ├── redis.yml                     # Cache
+    │   ├── rabbitmq.yml                  # Message broker
+    │   ├── mail.yml                      # MailHog (dev only)
+    │   └── ssh.yml                       # SSH access
+    │
+    ├── modes/                            # Sync modes
+    │   ├── default.yml
+    │   ├── mutagen.yml
+    │   └── ssh.yml
+    │
+    └── base.yml                          # Base networks and volumes
 ```
 
 **Rationale:**
-- Numbered prefixes ensure correct loading order
-- Clear separation of concerns by module
-- Framework adapters separate from core system
-- Easy to add new frameworks without modifying core
+- **Radical simplicity**: Core has ZERO framework knowledge
+- **One service = one file**: Easy to understand, test, enable/disable
+- **Plugin isolation**: Framework code completely separate
+- **Clear boundaries**: Can't accidentally mix core and framework logic
+- **Easy testing**: Test each service independently
+- **User choice**: Install only plugins you need
 
 **Alternatives Considered:**
-1. **Python rewrite**: More powerful but loses bash portability and increases dependencies
-2. **Single file with functions**: Doesn't solve maintenance or testing issues
-3. **Git submodules**: Adds complexity for users and deployment
+1. **Monolithic compose files**: Hard to maintain, can't cherry-pick services
+2. **Framework logic in core**: Defeats the purpose, creates coupling
+3. **Plugin discovery from ~/.webstack/**: Too complex, prefer explicit structure
 
-### Decision 2: Framework Detection and Loading
+### Decision 2: Compose File Loading Strategy
 
-**Mechanism:**
+**One Service = One File:**
 ```bash
-# Auto-detect framework from project files
-detect_framework() {
-  if [[ -f "composer.json" ]]; then
-    if grep -q '"oro/' composer.json 2>/dev/null; then
-      echo "oro"
-      return 0
-    elif grep -q '"magento/' composer.json 2>/dev/null; then
-      echo "magento"
-      return 0
+# Core services (always available)
+COMPOSE_FILES=(
+  "compose/base.yml"                      # Networks, volumes
+  "compose/modes/${DC_MODE:-default}.yml" # Sync mode
+  "compose/services/php-fpm.yml"          # PHP FPM
+  "compose/services/php-cli.yml"          # PHP CLI
+  "compose/services/nginx.yml"            # Webserver
+  "compose/services/redis.yml"            # Cache
+  "compose/services/rabbitmq.yml"         # Message broker
+  "compose/services/mail.yml"             # MailHog
+  "compose/services/ssh.yml"              # SSH access
+)
+
+# Database selection (user chooses)
+if [[ "${DC_DATABASE_SCHEMA}" == "pgsql" ]]; then
+  COMPOSE_FILES+=("compose/services/database-pgsql.yml")
+elif [[ "${DC_DATABASE_SCHEMA}" == "mysql" ]]; then
+  COMPOSE_FILES+=("compose/services/database-mysql.yml")
+fi
+
+# Plugin services (loaded by plugins)
+if [[ -n "${WEBSTACK_PLUGIN}" ]]; then
+  plugin_compose_dir="plugins/${WEBSTACK_PLUGIN}/compose"
+  if [[ -d "${plugin_compose_dir}" ]]; then
+    for compose_file in "${plugin_compose_dir}"/*.yml; do
+      COMPOSE_FILES+=("${compose_file}")
+    done
+  fi
+fi
+
+# Build final docker compose command
+DOCKER_COMPOSE_CMD="docker compose"
+for file in "${COMPOSE_FILES[@]}"; do
+  DOCKER_COMPOSE_CMD+=" -f ${file}"
+done
+```
+
+**Benefits:**
+- ✅ Each service is independently testable
+- ✅ Can enable/disable services by commenting one line
+- ✅ Clear service dependencies in separate files
+- ✅ Easy to override specific services
+- ✅ Plugin services don't pollute core
+
+**Rationale:**
+- Microservices philosophy applied to compose files
+- Explicit is better than implicit
+- Easy to understand what's running
+- No magic - just file inclusion
+
+**Alternatives Considered:**
+1. **Monolithic compose.yml**: Hard to maintain, everything coupled
+2. **Include directives**: Docker Compose doesn't support well
+3. **Template generation**: Too complex, harder to debug
+
+### Decision 3: Plugin System and Framework Detection
+
+**Plugin Structure:**
+```bash
+# Plugin layout
+plugins/oro/
+├── plugin.sh                 # Plugin entry point
+├── env.sh                    # Framework-specific environment
+├── compose/                  # Framework-specific services
+│   ├── websocket.yml
+│   ├── consumer.yml
+│   └── search.yml
+└── commands/                 # Framework-specific commands
+    ├── install.sh
+    ├── platformupdate.sh
+    └── updateurl.sh
+
+# Plugin interface (plugin.sh must implement)
+plugin_detect() {
+  # Return 0 if this framework is detected, 1 otherwise
+  grep -q '"oro/' composer.json 2>/dev/null
+}
+
+plugin_name() {
+  echo "oro"
+}
+
+plugin_init() {
+  # Load environment and commands
+  source "${PLUGIN_DIR}/env.sh"
+  
+  # Register commands
+  register_command "install" "${PLUGIN_DIR}/commands/install.sh"
+  register_command "platformupdate" "${PLUGIN_DIR}/commands/platformupdate.sh"
+  register_command "updateurl" "${PLUGIN_DIR}/commands/updateurl.sh"
+}
+
+plugin_compose_files() {
+  # Return list of additional compose files
+  echo "${PLUGIN_DIR}/compose/websocket.yml"
+  echo "${PLUGIN_DIR}/compose/consumer.yml"
+  echo "${PLUGIN_DIR}/compose/search.yml"
+}
+```
+
+**Plugin Discovery:**
+```bash
+# Auto-detect and load plugins
+for plugin_dir in plugins/*/; do
+  plugin_file="${plugin_dir}/plugin.sh"
+  if [[ -f "${plugin_file}" ]]; then
+    source "${plugin_file}"
+    if plugin_detect; then
+      WEBSTACK_PLUGIN=$(plugin_name)
+      plugin_init
+      break
     fi
   fi
-  
-  # Fallback to environment variable or default
-  echo "${DC_FRAMEWORK:-generic}"
-}
+done
 
-# Load framework adapter dynamically
-load_framework_adapter() {
-  local framework="$1"
-  local adapter_file="${WEBSTACK_FRAMEWORKS_DIR}/${framework}.sh"
-  
-  if [[ -f "$adapter_file" ]]; then
-    source "$adapter_file"
-  else
-    msg_warning "Framework adapter '$framework' not found, using generic mode"
-    source "${WEBSTACK_FRAMEWORKS_DIR}/generic.sh"
-  fi
-}
+# Or explicit plugin selection
+export WEBSTACK_PLUGIN=oro  # Force Oro plugin
 ```
 
 **Rationale:**
-- Automatic detection provides good UX
-- Explicit configuration allows overrides
-- Graceful fallback to generic mode if adapter missing
-- Framework adapters can override core functions
+- Plugins are completely self-contained
+- Core never imports framework code
+- Plugins register their commands dynamically
+- Easy to add new plugins without core changes
+- Plugins can be versioned independently
 
 **Alternatives Considered:**
-1. **Configuration file required**: More explicit but worse UX
-2. **Command-line flag required**: Too verbose for daily use
-3. **Docker image inspection**: Slower and less reliable
+1. **Framework code in core**: Defeats modularity purpose
+2. **Separate binaries per framework**: Installation complexity
+3. **Configuration file registration**: Less flexible than code-based
 
-### Decision 3: Infrastructure Module Interface
+### Decision 4: Environment Variable Separation (Core vs Plugin)
 
-**Standard Interface:**
-```bash
-# Each infrastructure module implements these functions:
-module_database_setup()      # Initialize database environment
-module_database_cli()        # Database CLI access
-module_database_import()     # Import database dump
-module_database_export()     # Export database dump
-module_database_healthcheck() # Check database health
+**Strategy: Minimal core variables + plugin-managed framework variables**
 
-# Similar for other modules:
-# - module_webserver_*
-# - module_cache_*
-# - module_search_*
-# - module_mq_*
-```
-
-**Rationale:**
-- Consistent interface across all infrastructure modules
-- Framework adapters can override specific functions
-- Easy to test individual modules in isolation
-- Clear contract for adding new infrastructure types
-
-**Alternatives Considered:**
-1. **Object-oriented approach**: Requires advanced bash or language change
-2. **Configuration-only**: Not flexible enough for complex logic
-3. **Docker Compose only**: Doesn't handle CLI commands and workflows
-
-### Decision 4: Environment Variable Naming
-
-**Strategy: Clean framework-agnostic naming from day one**
-
-**New clean naming scheme:**
+**Core variables (managed by webstack core):**
 ```bash
 # Project configuration
 DC_PROJECT_NAME=${DC_PROJECT_NAME:-$(basename $(pwd))}
-DC_FRAMEWORK=${DC_FRAMEWORK:-auto}
+DC_MODE=${DC_MODE:-default}  # default, mutagen, ssh
 
 # PHP/Node versions
 DC_PHP_VERSION=${DC_PHP_VERSION:-8.4}
 DC_NODE_VERSION=${DC_NODE_VERSION:-22}
 DC_COMPOSER_VERSION=${DC_COMPOSER_VERSION:-2}
 
-# Database configuration
+# Database (generic)
+DC_DATABASE_SCHEMA=${DC_DATABASE_SCHEMA:-pgsql}  # pgsql, mysql
 DC_DATABASE_HOST=${DC_DATABASE_HOST:-database}
 DC_DATABASE_PORT=${DC_DATABASE_PORT:-5432}
 DC_DATABASE_USER=${DC_DATABASE_USER:-app}
 DC_DATABASE_PASSWORD=${DC_DATABASE_PASSWORD:-app}
 DC_DATABASE_DBNAME=${DC_DATABASE_DBNAME:-app}
-DC_DATABASE_SCHEMA=${DC_DATABASE_SCHEMA:-pgsql}  # pgsql, mysql
 
-# Infrastructure services
+# Infrastructure services (generic)
 DC_REDIS_HOST=${DC_REDIS_HOST:-redis}
-DC_SEARCH_HOST=${DC_SEARCH_HOST:-search}
 DC_MQ_HOST=${DC_MQ_HOST:-mq}
+DC_MQ_USER=${DC_MQ_USER:-app}
+DC_MQ_PASSWORD=${DC_MQ_PASSWORD:-app}
 
-# Configuration paths
+# Paths
 DC_CONFIG_DIR=${DC_CONFIG_DIR:-$HOME/.webstack/${DC_PROJECT_NAME}}
 DC_APP_DIR=${DC_APP_DIR:-/var/www}
+
+# Ports
+DC_PORT_PREFIX=${DC_PORT_PREFIX:-302}
 ```
 
+**Plugin variables (managed by plugin env.sh):**
+```bash
+# Example: plugins/oro/env.sh
+
+# Oro-specific environment (derived from core variables)
+export ORO_DB_URL="pgsql://${DC_DATABASE_USER}:${DC_DATABASE_PASSWORD}@${DC_DATABASE_HOST}:${DC_DATABASE_PORT}/${DC_DATABASE_DBNAME}"
+export ORO_DB_DSN="${ORO_DB_URL}"
+
+# Oro-specific Redis DSNs
+export ORO_SESSION_DSN="redis://${DC_REDIS_HOST}:6379/0"
+export ORO_REDIS_CACHE_DSN="redis://${DC_REDIS_HOST}:6379/1"
+export ORO_REDIS_DOCTRINE_DSN="redis://${DC_REDIS_HOST}:6379/2"
+
+# Oro-specific search (if plugin includes search service)
+export ORO_SEARCH_ENGINE_DSN="elastic-search://search:9200?prefix=oro_search"
+export ORO_WEBSITE_SEARCH_ENGINE_DSN="elastic-search://search:9200?prefix=oro_website_search"
+
+# Oro-specific MQ
+export ORO_MQ_DSN="amqp://${DC_MQ_USER}:${DC_MQ_PASSWORD}@${DC_MQ_HOST}:5672/%2f"
+
+# Oro-specific WebSocket
+export ORO_WEBSOCKET_SERVER_DSN="//0.0.0.0:8080"
+export ORO_WEBSOCKET_FRONTEND_DSN="//${DC_PROJECT_NAME}.docker.local/ws"
+
+# Oro secret
+export ORO_SECRET=${ORO_SECRET:-ThisTokenIsNotSoSecretChangeIt}
+```
+
+**Clear Separation:**
+- ✅ Core knows NOTHING about Oro, Magento, or any framework
+- ✅ Core provides generic infrastructure (database, redis, mq)
+- ✅ Plugins transform core variables into framework-specific format
+- ✅ Plugins can add their own framework-specific variables
+- ✅ No variable pollution in core environment
+
 **Rationale:**
-- Clean, self-explanatory names
-- No legacy prefixes (ORO)
-- Framework-agnostic from start
-- Consistent naming pattern
-- Easy to remember and document
+- Radical separation of concerns
+- Core is truly framework-agnostic
+- Plugins fully control their environment
+- Easy to test core without frameworks
+- Framework variables don't leak into core
 
 **Alternatives Considered:**
-1. **Keep DC_ORO_* naming**: Misleading for non-Oro projects, legacy baggage
-2. **Remove DC_ prefix entirely**: Conflicts with other Docker tools
-3. **Use WEBSTACK_ prefix**: Too long, DC_ is established pattern
+1. **All variables in core**: Defeats modularity, creates coupling
+2. **No core variables**: Too generic, every plugin duplicates basics
+3. **Framework detection in core**: Core shouldn't know about frameworks
 
 ### Decision 5: Command Naming
 

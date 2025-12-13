@@ -8,20 +8,45 @@ This is a **clean break redesign** - we're building the next generation of the t
 
 ## What Changes
 
-- **BREAKING** Complete rewrite of OroDC as framework-agnostic WebStack:
-  - Core system (~500 lines): Docker Compose orchestration, environment initialization
-  - Pipeline management (~300 lines): Command routing, argument parsing, execution flow
-  - Infrastructure modules (~400 lines): Database, webserver, message queue, cache, search
-  - Framework adapters (~200-300 lines each): Oro, Magento, Laravel, and extensible plugin system
+- **BREAKING** Complete rewrite as minimalist core + plugin system:
+  - **Core system (~500 lines)**: Docker Compose orchestration, environment initialization
+  - **Infrastructure modules (~50-100 lines each)**: One file per service
+  - **CLI tools (~200 lines)**: Database import/export, SSH, basic PHP commands
+  - **Framework plugins (~200-300 lines each)**: Completely separate from core
 
-- Extract 110+ functions into logical modules organized by responsibility
-- Implement dynamic framework detection and adapter loading mechanism
-- Create standardized infrastructure module interface for reusable components
-- Establish plugin architecture for framework-specific commands and configurations
-- **BREAKING** Rename project to "docker-compose-webstack" or "webstack-cli"
-- **BREAKING** Rename binary from `orodc` to `webstack`
-- **BREAKING** Replace `DC_ORO_*` environment variables with clean `DC_*` naming
-- **BREAKING** Simplify Homebrew formula and remove Oro-specific assumptions
+- **Radical modularization approach:**
+  - Each Docker service = separate compose file (nginx.yml, database.yml, redis.yml, etc.)
+  - Each function = separate file (no monolithic scripts)
+  - Framework-specific logic = completely isolated plugins
+  - Zero framework assumptions in core
+
+- **Clean minimalist core includes ONLY:**
+  - PHP container (generic)
+  - Nginx webserver
+  - Database (PostgreSQL/MySQL)
+  - Redis cache
+  - Message broker (RabbitMQ)
+  - SSH access
+  - CLI functionality
+  - Database import/export
+
+- **Core does NOT include:**
+  - ❌ Oro-specific commands (install, platformupdate, updateurl)
+  - ❌ Framework-specific environment variables
+  - ❌ Framework-specific Docker configurations
+  - ❌ Elasticsearch/search (moved to plugins)
+  - ❌ WebSocket servers (framework-specific)
+
+- **Framework plugins provide:**
+  - Framework detection
+  - Framework-specific commands
+  - Framework-specific environment variables
+  - Framework-specific Docker services
+  - Framework-specific configurations
+
+- **BREAKING** Rename project to "webstack"
+- **BREAKING** Replace `DC_ORO_*` with minimal `DC_*` core variables
+- **BREAKING** Move all Oro functionality to oro-plugin
 
 ## Impact
 

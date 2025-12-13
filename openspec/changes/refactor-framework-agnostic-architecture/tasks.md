@@ -1,12 +1,20 @@
 # Implementation Tasks
 
 ## 1. Analysis and Preparation
-- [ ] 1.1 Document all existing functions and their dependencies
-- [ ] 1.2 Design clean environment variable naming scheme (DC_*)
-- [ ] 1.3 Identify Oro-specific vs framework-agnostic code
-- [ ] 1.4 Create module dependency graph
-- [ ] 1.5 Design test strategy for modular architecture
-- [ ] 1.6 Finalize project naming (webstack vs alternatives)
+- [ ] 1.1 Document all existing functions and categorize:
+  - Core infrastructure functions
+  - Oro-specific functions → move to plugin
+  - Framework-agnostic CLI functions
+- [ ] 1.2 Design minimal core variable scheme (DC_*)
+- [ ] 1.3 Map each existing service to separate compose file:
+  - Which services are core (PHP, nginx, DB, Redis, MQ)
+  - Which services are framework-specific (Elasticsearch, WebSocket, Consumer)
+- [ ] 1.4 Design plugin interface and discovery
+- [ ] 1.5 Create test strategy for:
+  - Core without plugins
+  - Core + Oro plugin
+  - Individual service compose files
+- [ ] 1.6 Finalize project naming (webstack confirmed)
 
 ## 2. Core System Module
 - [ ] 2.1 Create bin/webstack.d/00-core.sh
@@ -48,40 +56,77 @@
 - [ ] 6.6 Add Docker network management
 - [ ] 6.7 Test compose file merging logic
 
-## 7. Infrastructure Module Interface
-- [ ] 7.1 Create bin/webstack.d/50-infrastructure.sh
-- [ ] 7.2 Define infrastructure module interface
-- [ ] 7.3 Implement database module functions
-- [ ] 7.4 Implement webserver module functions
-- [ ] 7.5 Implement cache module functions
-- [ ] 7.6 Implement search module functions
-- [ ] 7.7 Implement message queue module functions
-- [ ] 7.8 Test infrastructure module isolation
+## 7. Core CLI Commands (Framework-Agnostic)
+- [ ] 7.1 Create bin/webstack.d/30-cli.sh (generic CLI commands)
+- [ ] 7.2 Implement database commands:
+  - webstack psql (PostgreSQL CLI)
+  - webstack mysql (MySQL CLI)
+  - webstack database-cli (generic DB shell)
+- [ ] 7.3 Create bin/webstack.d/40-database.sh (import/export)
+- [ ] 7.4 Implement database import:
+  - Support .sql and .sql.gz formats
+  - Auto-detect database schema
+  - Progress reporting
+- [ ] 7.5 Implement database export:
+  - Auto-detect database schema
+  - Compress with gzip
+  - Timestamped filenames
+  - MySQL DEFINER cleanup
+- [ ] 7.6 Implement container commands:
+  - webstack ssh (SSH access)
+  - webstack cli (CLI container bash)
+  - webstack bash (alias for cli)
+- [ ] 7.7 Test all CLI commands without plugins
+- [ ] 7.8 Document core CLI command usage
 
-## 8. Framework Adapter System
-- [ ] 8.1 Create bin/webstack.d/60-framework.sh
-- [ ] 8.2 Implement framework detection logic
-- [ ] 8.3 Create framework adapter loading system
-- [ ] 8.4 Define framework adapter interface
-- [ ] 8.5 Add plugin override mechanism
-- [ ] 8.6 Test framework detection
+## 8. Plugin System
+- [ ] 8.1 Create bin/webstack.d/50-plugin-loader.sh
+- [ ] 8.2 Design plugin interface (plugin_detect, plugin_init, etc.)
+- [ ] 8.3 Implement plugin discovery mechanism
+- [ ] 8.4 Create command registration system
+- [ ] 8.5 Implement plugin compose file loading
+- [ ] 8.6 Add plugin environment variable loading
+- [ ] 8.7 Test plugin isolation (core works without plugins)
+- [ ] 8.8 Test plugin loading and unloading
 
-## 9. Oro Framework Adapter
-- [ ] 9.1 Create bin/webstack-frameworks.d/oro.sh
-- [ ] 9.2 Implement Oro-specific commands (platformupdate, cache:*, updateurl, etc.)
-- [ ] 9.3 Set up Oro environment variables (ORO_DB_URL, ORO_SEARCH_DSN, etc.)
-- [ ] 9.4 Add Oro-specific command detection and routing
-- [ ] 9.5 Implement Oro database import/export with cleanup
-- [ ] 9.6 Add WebSocket and consumer container support
-- [ ] 9.7 Test Oro adapter with OroCommerce/OroPlatform projects
-- [ ] 9.8 Document Oro-specific features and commands
+## 9. Oro Plugin
+- [ ] 9.1 Create plugins/oro directory structure
+- [ ] 9.2 Create plugins/oro/plugin.sh (detection and init)
+- [ ] 9.3 Create plugins/oro/env.sh (Oro environment variables)
+- [ ] 9.4 Create Oro-specific compose files:
+  - plugins/oro/compose/websocket.yml
+  - plugins/oro/compose/consumer.yml
+  - plugins/oro/compose/search.yml (Elasticsearch)
+- [ ] 9.5 Implement Oro commands:
+  - plugins/oro/commands/install.sh
+  - plugins/oro/commands/platformupdate.sh
+  - plugins/oro/commands/updateurl.sh
+  - plugins/oro/commands/cache-clear.sh
+  - plugins/oro/commands/cache-warmup.sh
+- [ ] 9.6 Test Oro plugin with OroCommerce 6.1
+- [ ] 9.7 Test Oro plugin with OroPlatform 6.1
+- [ ] 9.8 Document Oro plugin features
+- [ ] 9.9 Verify core works WITHOUT Oro plugin loaded
 
-## 10. Generic Framework Adapter
-- [ ] 10.1 Create bin/webstack-frameworks.d/generic.sh
-- [ ] 10.2 Implement basic PHP/Symfony commands
-- [ ] 10.3 Add generic database operations
-- [ ] 10.4 Implement generic composer integration
-- [ ] 10.5 Test with non-Oro Symfony projects
+## 10. Core Functionality (No Plugin Required)
+- [ ] 10.1 Verify core works standalone (no plugins)
+- [ ] 10.2 Test basic commands:
+  - webstack up -d
+  - webstack down
+  - webstack ps
+  - webstack logs
+- [ ] 10.3 Test database operations:
+  - webstack importdb dump.sql
+  - webstack exportdb
+  - webstack psql / mysql
+- [ ] 10.4 Test PHP commands:
+  - webstack php -v
+  - webstack composer install
+  - webstack ssh
+  - webstack cli bash
+- [ ] 10.5 Test with plain Symfony projects (no plugin)
+- [ ] 10.6 Test with plain Laravel projects (no plugin)
+- [ ] 10.7 Document "core only" usage
 
 ## 11. Main Entry Point
 - [ ] 11.1 Create bin/webstack main entry point
@@ -99,18 +144,90 @@
 - [ ] 12.5 Document configuration best practices
 - [ ] 12.6 Test configuration loading in various scenarios
 
-## 13. Compose File Reorganization
-- [ ] 13.1 Create clean framework-agnostic base compose files
-- [ ] 13.2 Organize framework-specific compose in subdirectories:
-  - compose/frameworks/oro/
-  - compose/frameworks/magento/
-  - compose/frameworks/generic/
-- [ ] 13.3 Update compose file loading logic for new structure
-- [ ] 13.4 Implement framework-based compose file selection
-- [ ] 13.5 Test compose file resolution and merging
-- [ ] 13.6 Verify all services work correctly
+## 13. Compose Files - Base and Modes
+- [ ] 13.1 Create compose/base.yml (networks and volumes only):
+  - dc_shared_net network
+  - appcode volume
+  - home-user volume
+  - home-root volume
+- [ ] 13.2 Create compose/modes/default.yml (direct volume mount)
+- [ ] 13.3 Create compose/modes/mutagen.yml (Mutagen sync for macOS)
+- [ ] 13.4 Create compose/modes/ssh.yml (SSH remote sync)
+- [ ] 13.5 Test each mode independently
+- [ ] 13.6 Document when to use each mode
 
-## 14. Docker Image Strategy
+## 14. Compose Files - Core Services (One Service Per File)
+- [ ] 14.1 Create compose/services/php-fpm.yml:
+  - PHP-FPM container
+  - Generic PHP image (no Oro assumptions)
+  - Health check
+  - Resource limits
+- [ ] 14.2 Create compose/services/php-cli.yml:
+  - PHP CLI container
+  - Same image as FPM
+  - No command (sleep infinity or one-off runs)
+- [ ] 14.3 Create compose/services/nginx.yml:
+  - Generic nginx configuration
+  - No framework-specific rules
+  - Traefik labels
+  - Depends on php-fpm
+- [ ] 14.4 Create compose/services/database-pgsql.yml:
+  - PostgreSQL 15+ container
+  - Volume for data persistence
+  - Health check
+  - Environment variables from DC_DATABASE_*
+- [ ] 14.5 Create compose/services/database-mysql.yml:
+  - MySQL/MariaDB container
+  - Volume for data persistence
+  - Health check
+  - Alternative to PostgreSQL
+- [ ] 14.6 Create compose/services/redis.yml:
+  - Redis 6.2+ container
+  - Single database (plugins configure multiple)
+  - Health check
+- [ ] 14.7 Create compose/services/rabbitmq.yml:
+  - RabbitMQ 3.9+ with management
+  - Generic MQ configuration
+  - Health check
+  - Management UI port
+- [ ] 14.8 Create compose/services/mail.yml:
+  - MailHog for email testing
+  - SMTP and web UI ports
+  - Traefik labels
+- [ ] 14.9 Create compose/services/ssh.yml:
+  - SSH server container
+  - Same image as CLI
+  - Host key persistence
+  - Port 2222
+
+## 15. Test Individual Services
+- [ ] 15.1 Test each service starts independently
+- [ ] 15.2 Test service health checks
+- [ ] 15.3 Test service dependencies
+- [ ] 15.4 Test service networking
+- [ ] 15.5 Test volume mounts for each service
+- [ ] 15.6 Test resource limits
+- [ ] 15.7 Document service-specific configuration
+
+## 16. Oro Plugin Compose Files
+- [ ] 16.1 Create plugins/oro/compose/search.yml:
+  - Elasticsearch 8.10.3
+  - Oro-specific configuration
+  - Volume for data
+  - Health check
+- [ ] 16.2 Create plugins/oro/compose/websocket.yml:
+  - WebSocket server container
+  - Oro websocket command
+  - Traefik routing for /ws
+- [ ] 16.3 Create plugins/oro/compose/consumer.yml:
+  - Message consumer container
+  - oro:message-queue:consume command
+  - Auto-restart
+- [ ] 16.4 Test Oro plugin services load correctly
+- [ ] 16.5 Test Oro services DON'T load without plugin
+- [ ] 16.6 Verify core works without Oro services
+
+## 17. Docker Image Strategy
 - [ ] 14.1 Design new image naming: ghcr.io/digitalspacestdio/webstack-*
 - [ ] 14.2 Create framework-agnostic base images:
   - webstack-php:8.3-node20
@@ -131,7 +248,7 @@
 - [ ] 15.6 Add architecture diagrams
 - [ ] 15.7 Create troubleshooting guide for modular architecture
 
-## 16. Homebrew Formula Creation
+## 18. Homebrew Formula Creation
 - [ ] 16.1 Create NEW Formula/webstack.rb (separate from old orodc)
 - [ ] 16.2 Configure webstack binary installation
 - [ ] 16.3 Set up formula dependencies (docker, docker-compose, etc.)
@@ -141,7 +258,7 @@
 - [ ] 16.7 Document formula in README
 - [ ] 16.8 Keep old docker-compose-oroplatform formula for legacy support
 
-## 17. CI/CD Updates
+## 19. CI/CD Updates
 - [ ] 17.1 Update GitHub Actions workflows
 - [ ] 17.2 Add modular testing strategy
 - [ ] 17.3 Test framework adapter matrix
@@ -149,7 +266,7 @@
 - [ ] 17.5 Update Goss tests for new architecture
 - [ ] 17.6 Verify CI/CD passes for all scenarios
 
-## 18. Integration Testing
+## 20. Integration Testing
 - [ ] 18.1 Test with Oro Platform 6.1 projects
 - [ ] 18.2 Test with OroCommerce 6.1 projects
 - [ ] 18.3 Test with OroCRM projects
@@ -160,14 +277,14 @@
 - [ ] 18.8 Performance testing vs legacy OroDC
 - [ ] 18.9 Load testing with multiple projects
 
-## 19. Performance Optimization
+## 21. Performance Optimization
 - [ ] 19.1 Profile module loading time
 - [ ] 19.2 Optimize critical path functions
 - [ ] 19.3 Implement lazy loading if needed
 - [ ] 19.4 Benchmark against monolithic version
 - [ ] 19.5 Ensure <100ms overhead target met
 
-## 20. Release Preparation (v1.0.0)
+## 22. Release Preparation (v1.0.0)
 - [ ] 20.1 Complete all documentation rewrite
 - [ ] 20.2 Create comprehensive CHANGELOG.md
 - [ ] 20.3 Write migration guide from OroDC v0.x to WebStack v1.0
@@ -180,7 +297,7 @@
 - [ ] 20.10 Publish Homebrew formula
 - [ ] 20.11 Announce release to community
 
-## 21. Post-v1.0 Roadmap
+## 23. Post-v1.0 Roadmap
 - [ ] 21.1 Magento 2 framework adapter (v1.1)
 - [ ] 21.2 Laravel framework adapter (v1.2)
 - [ ] 21.3 WordPress framework adapter (v1.3)

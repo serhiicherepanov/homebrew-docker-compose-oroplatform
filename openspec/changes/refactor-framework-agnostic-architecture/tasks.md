@@ -98,6 +98,99 @@
   - Check if called as symlink (php, node, python)
   - Check first argument for indicators
   - Return detected binary or false
+
+## 6a. Sync Mode Support
+- [ ] 6a.1 Create compose/modes/ directory
+  - compose/modes/default.yml (direct volume mount)
+  - compose/modes/mutagen.yml (Mutagen sync for macOS)
+  - compose/modes/ssh.yml (SSH remote sync)
+- [ ] 6a.2 Implement mode selection logic in bin/dcx.d/00-core.sh
+  - Read DC_MODE environment variable
+  - Validate mode against available modes
+  - Load appropriate compose/modes/*.yml file
+- [ ] 6a.3 Add Mutagen support
+  - Check mutagen binary availability
+  - Generate mutagen sync configuration
+  - Start/stop mutagen sessions
+- [ ] 6a.4 Add SSH mode support
+  - SSH key management
+  - Remote Docker connection
+  - File synchronization
+- [ ] 6a.5 Write tests for sync mode selection
+  - Test default mode
+  - Test mutagen mode (mock binary)
+  - Test ssh mode
+  - Test invalid mode error
+
+## 6b. Multiple Hostname Support (DC_EXTRA_HOSTS)
+- [ ] 6b.1 Implement hostname parsing in bin/dcx.d/20-env.sh
+  - Parse DC_EXTRA_HOSTS comma-separated list
+  - Trim whitespace from entries
+  - Filter empty entries
+- [ ] 6b.2 Implement hostname processing
+  - Detect short names (single word)
+  - Append .docker.local to short names
+  - Keep full hostnames as-is
+  - Build hostname array
+- [ ] 6b.3 Generate Traefik routing rule
+  - Combine main hostname + extra hosts
+  - Generate Host() || Host() || ... rule
+  - Export DC_TRAEFIK_RULE variable
+- [ ] 6b.4 Update nginx configuration
+  - Generate server_name directive with all hosts
+  - Update nginx/site.conf.j2 template
+- [ ] 6b.5 Write tests for hostname processing
+  - Test short names: "api,admin"
+  - Test full names: "api.local,admin.example.com"
+  - Test mixed: "api,admin.local,external.com"
+  - Test empty/whitespace handling
+
+## 6c. XDEBUG Configuration Support
+- [ ] 6c.1 Implement XDEBUG environment detection
+  - Read XDEBUG_MODE (global)
+  - Read XDEBUG_MODE_FPM, XDEBUG_MODE_CLI, XDEBUG_MODE_CONSUMER
+  - Per-container overrides global mode
+- [ ] 6c.2 Implement XDEBUG mode persistence
+  - Save XDEBUG settings to ${DC_CONFIG_DIR}/.xdebug_env
+  - Load saved settings on startup
+  - Override with new environment variables if provided
+- [ ] 6c.3 Pass XDEBUG configuration to containers
+  - Set XDEBUG_MODE environment in PHP containers
+  - Different modes for FPM, CLI, consumer
+  - Default to "off" if not set
+- [ ] 6c.4 Add XDEBUG validation
+  - Validate mode values (off, debug, coverage, profile, trace)
+  - Show error for invalid modes
+  - List supported modes
+- [ ] 6c.5 Update compose files for XDEBUG
+  - Add XDEBUG_MODE to service environment sections
+  - Support per-service overrides
+- [ ] 6c.6 Write tests for XDEBUG configuration
+  - Test global mode
+  - Test per-container modes
+  - Test persistence
+  - Test validation
+
+## 6d. Custom Docker Image Configuration
+- [ ] 6d.1 Define custom image environment variables
+  - DC_PGSQL_IMAGE, DC_PGSQL_VERSION
+  - DC_MYSQL_IMAGE, DC_MYSQL_VERSION
+  - DC_REDIS_IMAGE, DC_REDIS_VERSION
+  - DC_NGINX_IMAGE, DC_NGINX_VERSION
+  - DC_RABBITMQ_IMAGE, DC_RABBITMQ_VERSION
+- [ ] 6d.2 Update compose service files to use variables
+  - compose/services/database-pgsql.yml: image: ${DC_PGSQL_IMAGE}:${DC_PGSQL_VERSION}
+  - compose/services/database-mysql.yml: image: ${DC_MYSQL_IMAGE}:${DC_MYSQL_VERSION}
+  - compose/services/redis.yml: image: ${DC_REDIS_IMAGE}:${DC_REDIS_VERSION}
+  - compose/services/nginx.yml: image: ${DC_NGINX_IMAGE}:${DC_NGINX_VERSION}
+- [ ] 6d.3 Add custom image defaults
+  - Set default images in bin/dcx.d/20-env.sh
+  - Allow overrides from .env.dcx
+  - Validate image accessibility
+- [ ] 6d.4 Write tests for custom images
+  - Test custom PostgreSQL image
+  - Test custom Redis image
+  - Test invalid image handling
 - [ ] 6.3 Implement execute_with_redirect()
   - Check if container running (exec vs run)
   - Execute with proper binary

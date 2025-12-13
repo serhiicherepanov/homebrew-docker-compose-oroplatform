@@ -146,3 +146,128 @@ The core system SHALL support loading additional modules and framework adapters 
 - **AND** it SHALL allow framework adapters to override core functions
 - **AND** it SHALL maintain isolation between core and framework-specific code
 
+### Requirement: Sync Mode Support
+The core system SHALL support multiple file synchronization modes optimized for different platforms.
+
+#### Scenario: Default sync mode (Linux/WSL2)
+- **WHEN** DC_MODE=default or not set
+- **THEN** it SHALL use compose/modes/default.yml
+- **AND** it SHALL use direct Docker volume mounts
+- **AND** this SHALL provide excellent performance on Linux and WSL2
+
+#### Scenario: Mutagen sync mode (macOS)
+- **WHEN** DC_MODE=mutagen
+- **THEN** it SHALL use compose/modes/mutagen.yml
+- **AND** it SHALL use Mutagen for file synchronization
+- **AND** it SHALL require mutagen binary to be installed
+- **AND** this SHALL avoid slow Docker filesystem on macOS
+
+#### Scenario: SSH sync mode (Remote Docker)
+- **WHEN** DC_MODE=ssh
+- **THEN** it SHALL use compose/modes/ssh.yml
+- **AND** it SHALL use SSH-based remote synchronization
+- **AND** this SHALL work with remote Docker hosts
+- **AND** this SHALL support Docker-in-Docker scenarios
+
+#### Scenario: Invalid sync mode
+- **WHEN** DC_MODE is set to invalid value
+- **THEN** it SHALL show error message
+- **AND** it SHALL list available modes
+- **AND** it SHALL exit with error code 1
+
+### Requirement: Multiple Hostname Support
+The core system SHALL support configuring multiple hostnames for a single application instance.
+
+#### Scenario: Configure additional hostnames
+- **WHEN** DC_EXTRA_HOSTS="api,admin,shop" is set
+- **THEN** it SHALL generate Traefik routing rules for all hostnames
+- **AND** main hostname SHALL be ${DC_PROJECT_NAME}.docker.local
+- **AND** additional hostnames SHALL include api.docker.local, admin.docker.local, shop.docker.local
+
+#### Scenario: Process short hostname forms
+- **WHEN** DC_EXTRA_HOSTS contains short names (single words)
+- **THEN** it SHALL automatically append .docker.local suffix
+- **AND** "api" SHALL become "api.docker.local"
+- **AND** "admin" SHALL become "admin.docker.local"
+
+#### Scenario: Process full hostname forms
+- **WHEN** DC_EXTRA_HOSTS contains full hostnames (with dots)
+- **THEN** it SHALL use hostnames as-is
+- **AND** "api.myproject.local" SHALL remain "api.myproject.local"
+- **AND** "external.example.com" SHALL remain "external.example.com"
+
+#### Scenario: Handle mixed hostname formats
+- **WHEN** DC_EXTRA_HOSTS="api,admin.myproject.local,external.example.com"
+- **THEN** it SHALL process each correctly:
+  - "api" → "api.docker.local"
+  - "admin.myproject.local" → "admin.myproject.local"
+  - "external.example.com" → "external.example.com"
+
+#### Scenario: Generate Traefik routing rule
+- **WHEN** building Traefik configuration
+- **THEN** it SHALL create Host() rule with OR operator for all hostnames
+- **AND** rule SHALL be: `Host(\`project.docker.local\`) || Host(\`api.docker.local\`) || ...`
+
+### Requirement: XDEBUG Configuration Support
+The core system SHALL support flexible XDEBUG configuration for debugging PHP applications.
+
+#### Scenario: Global XDEBUG mode
+- **WHEN** XDEBUG_MODE environment variable is set
+- **THEN** it SHALL apply to all PHP containers (FPM, CLI, consumer)
+- **AND** mode SHALL be passed to containers via environment
+- **AND** settings SHALL persist until containers are recreated
+
+#### Scenario: Per-container XDEBUG mode
+- **WHEN** XDEBUG_MODE_FPM is set
+- **THEN** it SHALL apply only to FPM container
+- **AND** XDEBUG_MODE_CLI SHALL apply only to CLI container
+- **AND** XDEBUG_MODE_CONSUMER SHALL apply only to consumer container
+- **AND** per-container settings SHALL override global XDEBUG_MODE
+
+#### Scenario: XDEBUG mode persistence
+- **WHEN** XDEBUG mode is configured
+- **THEN** it SHALL save configuration to ${DC_CONFIG_DIR}/.xdebug_env
+- **AND** configuration SHALL persist across dcx invocations
+- **AND** configuration SHALL load automatically on next dcx command
+
+#### Scenario: Disable XDEBUG
+- **WHEN** XDEBUG_MODE is not set
+- **THEN** it SHALL default to "off"
+- **AND** XDEBUG SHALL be disabled for optimal performance
+- **AND** no debugging overhead SHALL be present
+
+#### Scenario: Common XDEBUG modes
+- **WHEN** setting XDEBUG_MODE
+- **THEN** it SHALL support values:
+  - "off": Disable XDEBUG
+  - "debug": Step debugging
+  - "coverage": Code coverage
+  - "profile": Performance profiling
+  - "trace": Function trace
+- **AND** multiple modes SHALL be comma-separated
+
+### Requirement: Custom Docker Image Configuration
+The core system SHALL allow overriding Docker images for infrastructure services.
+
+#### Scenario: Override database image
+- **WHEN** DC_PGSQL_IMAGE and DC_PGSQL_VERSION are set
+- **THEN** it SHALL use custom PostgreSQL image instead of default
+- **AND** compose/services/database-pgsql.yml SHALL reference these variables
+- **AND** custom image SHALL be used in service definition
+
+#### Scenario: Override cache image
+- **WHEN** DC_REDIS_IMAGE and DC_REDIS_VERSION are set
+- **THEN** it SHALL use custom Redis image
+- **AND** this SHALL allow using Redis alternatives or custom builds
+
+#### Scenario: Override webserver image
+- **WHEN** DC_NGINX_IMAGE and DC_NGINX_VERSION are set
+- **THEN** it SHALL use custom nginx image
+- **AND** custom configurations SHALL be possible
+
+#### Scenario: Plugin services custom images
+- **WHEN** plugin provides services (e.g., Elasticsearch)
+- **THEN** plugin SHALL manage its own image configuration
+- **AND** plugin environment variables SHALL control plugin service images
+- **AND** core SHALL NOT know about plugin-specific images
+

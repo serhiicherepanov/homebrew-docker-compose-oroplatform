@@ -96,13 +96,646 @@ compose/
 - **Plugin System**: Enable framework-specific extensions through plugins
 - **Reusable Infrastructure**: Share database, webserver, cache modules across frameworks
 - **Production Ready**: Build v1.0 with solid foundations for future growth
+- **Evaluate Technology Stack**: Bash vs Go vs Hybrid - choose optimal solution
 
 ### Non-Goals
-- **Not rewriting in another language**: Keep bash for simplicity and portability
 - **Not changing Docker Compose approach**: Continue using Docker Compose as orchestration
-- **Not removing Oro support**: Oro remains supported through dedicated adapter
+- **Not removing Oro support**: Oro remains supported through dedicated plugin
 - **Not maintaining backward compatibility**: This is a clean break redesign (v0.x → v1.0)
 - **Not adding all frameworks immediately**: Start with Oro + Generic, add others incrementally
+- **Not over-engineering**: Choose simplest solution that meets requirements
+
+## Critical Decision: Bash vs Go vs Hybrid
+
+### Current State: Bash (2386 lines)
+OroDC is currently implemented in Bash, which has served well but shows limitations:
+
+**Bash Pros:**
+- ✅ No compilation needed - instant execution
+- ✅ No dependencies - works everywhere Docker is installed
+- ✅ Perfect for Docker Compose orchestration (just shell out to `docker compose`)
+- ✅ Easy to debug - just read the script
+- ✅ Contributors know bash (lower barrier to entry)
+- ✅ Homebrew installation is trivial (just copy script)
+
+**Bash Cons:**
+- ❌ Hard to test (no proper unit testing framework)
+- ❌ No type safety - runtime errors only
+- ❌ Complex argument parsing (2386 lines is unwieldy)
+- ❌ No proper module system (sourcing files isn't great)
+- ❌ Error handling is verbose (`set -e` is blunt instrument)
+- ❌ Performance (bash is slow, though Docker is slower so doesn't matter much)
+
+### Option 1: Stay with Bash (Modularized)
+
+**Implementation:**
+```bash
+dcx/
+├── bin/dcx                    # ~100 lines entry point
+└── dcx.d/
+    ├── 00-core.sh            # ~200 lines
+    ├── 10-utils.sh           # ~150 lines
+    ├── 20-env.sh             # ~200 lines
+    ├── 30-cli.sh             # ~200 lines
+    ├── 40-database.sh        # ~200 lines
+    └── 50-plugin-loader.sh   # ~150 lines
+```
+
+**Pros:**
+- ✅ Simplest migration from current code
+- ✅ No new dependencies
+- ✅ Instant startup (no compilation)
+- ✅ Easy to contribute (everyone knows bash)
+- ✅ Perfect for Docker orchestration
+
+**Cons:**
+- ❌ Still hard to test properly
+- ❌ No type safety
+- ❌ Complex logic remains complex
+- ❌ Plugin system will be hacky (sourcing files)
+
+**Verdict:** Good for v1.0, but will hit limits as project grows.
+
+---
+
+### Option 2: Rewrite in Go
+
+**Implementation:**
+```go
+dcx/
+├── cmd/dcx/
+│   └── main.go                # CLI entry point
+├── pkg/
+│   ├── core/                  # Docker Compose orchestration
+│   ├── compose/               # Compose file management
+│   ├── database/              # Database import/export
+│   ├── plugin/                # Plugin system
+│   └── config/                # Configuration management
+├── plugins/
+│   └── oro/                   # Oro plugin (could be Go or bash)
+└── compose/                   # Docker Compose YAML files
+```
+
+**Pros:**
+- ✅ **Proper testing** - Go has excellent testing framework
+- ✅ **Type safety** - catch errors at compile time
+- ✅ **Better performance** - though Docker is bottleneck anyway
+- ✅ **Proper module system** - clean imports
+- ✅ **Better error handling** - explicit error returns
+- ✅ **Plugin system** - Go plugins or gRPC for plugins
+- ✅ **Cross-compilation** - single binary for all platforms
+- ✅ **Structured logging** - proper logging framework
+- ✅ **Future features** - easier to add rolling updates, scaling, etc.
+
+**Cons:**
+- ❌ **Higher barrier to entry** - fewer contributors know Go
+- ❌ **Compilation required** - adds build step
+- ❌ **Binary size** - ~10MB vs 50KB bash script
+- ❌ **More complex Homebrew formula** - need to compile
+- ❌ **Longer startup time** - ~10ms vs instant (negligible)
+- ❌ **Complete rewrite** - can't reuse bash code
+
+**Verdict:** Better long-term architecture, but higher upfront cost.
+
+---
+
+### Option 3: Hybrid (Go Core + Bash/Any Plugins)
+
+**Implementation:**
+```
+dcx/
+├── cmd/dcx/main.go            # Go CLI
+├── pkg/
+│   ├── core/                  # Go core
+│   ├── compose/               # Go compose management
+│   └── plugin/                # Plugin interface (exec plugins)
+├── plugins/
+│   └── oro/
+│       ├── plugin.sh          # Bash plugin (or Go binary)
+│       └── commands/          # Individual commands
+└── compose/                   # Docker Compose YAML
+```
+
+**How it works:**
+1. **Go core** handles:
+   - CLI parsing
+   - Docker Compose orchestration
+   - Configuration management
+   - Plugin discovery and execution
+   - Database import/export core logic
+
+2. **Plugins** can be:
+   - Bash scripts (easy to write)
+   - Go binaries (compiled)
+   - Python scripts
+   - Any executable
+
+3. **Plugin interface:**
+   ```go
+   // Go calls plugin via exec
+   cmd := exec.Command("plugins/oro/plugin.sh", "detect")
+   output, _ := cmd.Output()
+   
+   // Plugin implements standard interface
+   // detect, init, commands, compose-files
+   ```
+
+**Pros:**
+- ✅ **Best of both worlds** - Go core strength, plugin flexibility
+- ✅ **Easy plugin development** - use bash, Go, or anything
+- ✅ **Testable core** - Go testing for core logic
+- ✅ **Gradual migration** - can reuse some bash code in plugins
+- ✅ **Performance where it matters** - Go for heavy lifting
+- ✅ **Flexibility** - plugins in any language
+
+**Cons:**
+- ❌ **More complex** - two languages to maintain in core team
+- ❌ **IPC overhead** - exec calls for plugins (minimal)
+- ❌ **Two build systems** - Go compilation + bash distribution
+
+**Verdict:** Most flexible, but adds complexity.
+
+---
+
+## Recommendation Analysis
+
+### For v1.0: **Go Core + Plugin Interface**
+
+**Rationale:**
+
+1. **Testing is Critical**
+   - Database import/export needs unit tests
+   - Compose file merging needs tests
+   - Configuration parsing needs tests
+   - Bash makes this very hard
+
+2. **Future Features Require Structure**
+   - Rolling updates
+   - Container scaling
+   - Health monitoring
+   - Metrics collection
+   - These are much easier in Go
+
+3. **Plugin System Benefits**
+   - Oro plugin can start as bash
+   - Community can write plugins in any language
+   - Core remains clean and tested
+
+4. **Production Usage**
+   - Type safety prevents bugs
+   - Better error messages
+   - Structured logging
+   - Easier to debug production issues
+
+5. **Performance** (minor but nice)
+   - Config parsing faster
+   - File operations faster
+   - Startup time negligible difference
+
+### Migration Path
+
+**Phase 1: Core in Go**
+```
+dcx (Go binary)
+├── CLI parsing (cobra)
+├── Docker Compose exec
+├── Config management
+├── Plugin discovery
+└── Basic commands
+```
+
+**Phase 2: Oro Plugin (Bash initially)**
+```
+plugins/oro/
+├── plugin.sh          # Bash implementation
+├── commands/
+│   ├── install.sh
+│   ├── platformupdate.sh
+│   └── updateurl.sh
+└── compose/
+    ├── websocket.yml
+    └── consumer.yml
+```
+
+**Phase 3: Optimize plugins as needed**
+- Critical plugins can be rewritten in Go
+- Most can stay in bash
+- Community decides based on needs
+
+### Technology Stack (Go Implementation)
+
+**Core Libraries:**
+```go
+github.com/spf13/cobra              // CLI framework
+github.com/spf13/viper              // Configuration
+github.com/docker/compose/v2        // Compose parsing (maybe)
+gopkg.in/yaml.v3                    // YAML handling
+github.com/joho/godotenv            // .env files
+```
+
+**Project Structure:**
+```go
+dcx/
+├── cmd/dcx/main.go
+├── pkg/
+│   ├── compose/       // Compose file management
+│   │   ├── loader.go
+│   │   ├── merger.go
+│   │   └── writer.go
+│   ├── database/      // Database operations
+│   │   ├── import.go
+│   │   └── export.go
+│   ├── plugin/        // Plugin system
+│   │   ├── loader.go
+│   │   ├── executor.go
+│   │   └── interface.go
+│   └── docker/        // Docker/Compose exec
+│       ├── compose.go
+│       └── container.go
+├── internal/
+│   └── config/        // Internal config
+└── plugins/
+```
+
+---
+
+## Alternative: Stay Bash with Testing Framework
+
+**If we want to stay bash**, use:
+```bash
+# Testing with bats (Bash Automated Testing System)
+brew install bats-core
+
+# Example test
+@test "database import detects PostgreSQL" {
+  export DC_DATABASE_SCHEMA="pgsql"
+  run dcx importdb test.sql
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "PostgreSQL" ]]
+}
+```
+
+**Pros:**
+- ✅ Can test bash code
+- ✅ Stay in bash ecosystem
+
+**Cons:**
+- ❌ Still no type safety
+- ❌ Tests slower than Go
+- ❌ Still complex for large codebase
+
+---
+
+## Final Recommendation: **Go Core**
+
+**Why Go wins:**
+1. ✅ **Testing is mandatory** - v1.0 needs solid test coverage
+2. ✅ **Production ready** - type safety prevents entire class of bugs
+3. ✅ **Future proof** - rolling updates, scaling, monitoring all easier
+4. ✅ **Better error handling** - explicit errors, stack traces
+5. ✅ **Plugin flexibility** - exec interface supports any language
+6. ✅ **Performance** - bonus, not main reason
+7. ✅ **Single binary** - easier distribution than multi-file bash
+
+**Trade-offs accepted:**
+- ❌ Higher initial development cost (worth it for v1.0)
+- ❌ Compilation required (Homebrew handles this)
+- ❌ Fewer bash contributors (but attract Go community)
+
+**Implementation timeline:**
+- Weeks 1-2: Core architecture in Go
+- Weeks 3-4: Docker Compose integration
+- Weeks 5-6: Plugin system
+- Weeks 7-8: Oro plugin (bash initially)
+- Week 9+: Testing, refinement
+
+## Core Architecture (Language Agnostic)
+
+### Core Responsibilities
+
+**1. Compose File Management**
+```
+Input: Multiple YAML files
+Process:
+  - Load base.yml (networks, volumes)
+  - Load mode/*.yml (based on DC_MODE)
+  - Load services/*.yml (enabled services)
+  - Load plugin compose files
+  - Merge all files
+Output: docker compose -f file1.yml -f file2.yml ...
+```
+
+**2. Configuration Management**
+```
+Sources (priority order):
+  1. Environment variables (DC_*)
+  2. .env.dcx file
+  3. ~/.dcx/PROJECT/config
+  4. Defaults
+
+Validation:
+  - Required variables set
+  - Valid values (e.g., DC_DATABASE_SCHEMA in [pgsql, mysql])
+  - Path existence
+  - Port conflicts
+```
+
+**3. Plugin Discovery & Loading**
+```
+Discovery:
+  1. Scan plugins/ directory
+  2. For each plugin: call detect()
+  3. If detected, call init()
+  4. Register commands
+  5. Collect compose files
+
+Interface:
+  - detect() → bool
+  - init() → void
+  - commands() → []Command
+  - compose_files() → []string
+  - env_vars() → map[string]string
+```
+
+**4. Docker Compose Execution**
+```
+Responsibilities:
+  - Build docker compose command with all -f flags
+  - Execute docker compose with proper flags
+  - Stream output to user
+  - Capture exit code
+  - Handle interrupts (Ctrl+C)
+
+Must NOT:
+  - Parse Docker Compose YAML (docker compose does this)
+  - Implement Docker logic (delegate to docker compose)
+```
+
+**5. Database Operations**
+```
+Import:
+  - Detect file format (.sql, .sql.gz)
+  - Decompress if needed
+  - Detect database schema (pgsql/mysql)
+  - Execute in database container
+  - Show progress
+
+Export:
+  - Detect database schema
+  - Choose appropriate dump command
+  - Compress output
+  - Save with timestamp
+  - Clean problematic SQL (DEFINER, etc.)
+```
+
+**6. Container Execution**
+```
+Command types:
+  - docker compose run (one-off)
+  - docker compose exec (running container)
+  - SSH into container
+  - Execute PHP commands
+  - Execute database CLIs
+
+Must handle:
+  - TTY allocation
+  - Stdin/stdout/stderr
+  - Environment variables
+  - Working directory
+  - User/permissions
+```
+
+---
+
+### Core Modules (Detailed)
+
+**Module: Compose Loader**
+```
+Responsibilities:
+  - Discover compose files
+  - Validate YAML syntax
+  - Build file list in correct order
+  - Handle missing files gracefully
+
+Interface:
+  LoadBase() → ComposeFile
+  LoadMode(mode string) → ComposeFile
+  LoadServices(enabled []string) → []ComposeFile
+  LoadPluginFiles(plugin Plugin) → []ComposeFile
+  BuildCommand() → []string
+```
+
+**Module: Configuration**
+```
+Responsibilities:
+  - Load environment variables
+  - Parse .env.dcx
+  - Validate configuration
+  - Provide defaults
+  - Merge configurations
+
+Interface:
+  Load() → Config
+  Validate() → []Error
+  Get(key string) → string
+  Set(key, value string)
+  Save() → error
+```
+
+**Module: Plugin Manager**
+```
+Responsibilities:
+  - Discover plugins
+  - Load plugin metadata
+  - Execute plugin interface methods
+  - Register plugin commands
+  - Isolate plugin failures
+
+Interface:
+  Discover() → []Plugin
+  Load(name string) → Plugin
+  Execute(plugin Plugin, method string) → Result
+  RegisterCommand(plugin Plugin, cmd Command)
+```
+
+**Module: Docker Client**
+```
+Responsibilities:
+  - Execute docker compose commands
+  - Execute docker commands
+  - Stream output
+  - Handle errors
+  - Check daemon availability
+
+Interface:
+  ComposeUp(services []string) → error
+  ComposeDown() → error
+  ComposeExec(service, cmd string) → error
+  ComposeRun(service, cmd string) → error
+  IsRunning(service string) → bool
+```
+
+**Module: Database Manager**
+```
+Responsibilities:
+  - Import database dumps
+  - Export database dumps
+  - Detect database type
+  - Clean problematic SQL
+  - Show progress
+
+Interface:
+  Import(file string, schema string) → error
+  Export(schema string) → (file string, error)
+  DetectSchema() → string
+  CleanSQL(sql string, schema string) → string
+```
+
+---
+
+### Error Handling Strategy
+
+**Principle: Fail Fast, Fail Clear**
+
+```
+Error Types:
+  1. Configuration errors (missing DC_DATABASE_SCHEMA)
+     → Show error, suggest fix, exit code 1
+  
+  2. Dependency errors (docker not found)
+     → Show error, show install instructions, exit code 1
+  
+  3. Runtime errors (database import failed)
+     → Show error, show logs, exit code from docker
+  
+  4. User errors (unknown command)
+     → Show help, suggest similar commands, exit code 2
+
+Error Messages:
+  - Clear description
+  - Context (what was being done)
+  - Suggestion (how to fix)
+  - Exit code (scriptable)
+```
+
+**Example (Go):**
+```go
+func ImportDatabase(file string) error {
+    if !fileExists(file) {
+        return fmt.Errorf(
+            "database import failed: file not found: %s\n"+
+            "  Suggestion: check file path or use absolute path\n"+
+            "  Example: dcx importdb /path/to/dump.sql",
+            file,
+        )
+    }
+    
+    schema := detectSchema()
+    if schema == "" {
+        return fmt.Errorf(
+            "database import failed: cannot detect database schema\n"+
+            "  Suggestion: set DC_DATABASE_SCHEMA environment variable\n"+
+            "  Example: export DC_DATABASE_SCHEMA=pgsql",
+        )
+    }
+    
+    // ... import logic
+}
+```
+
+---
+
+### Testing Strategy
+
+**Unit Tests (Fast, Isolated)**
+```
+Test coverage target: >80%
+
+What to test:
+  - Configuration parsing
+  - Compose file loading
+  - Plugin discovery
+  - Error handling
+  - Database SQL cleaning
+
+Mock:
+  - File system
+  - Docker client
+  - Plugin execution
+```
+
+**Integration Tests (Slower, Real Docker)**
+```
+Test scenarios:
+  - Full installation flow
+  - Database import/export
+  - Service startup
+  - Plugin loading
+  - Command execution
+
+Use:
+  - Real Docker
+  - Test compose files
+  - Temporary directories
+```
+
+**E2E Tests (Slowest, Complete)**
+```
+Test scenarios:
+  - Install Oro
+  - Run Oro tests
+  - Import production dump
+  - Export database
+  - Plugin system
+
+CI/CD:
+  - GitHub Actions
+  - Test matrix (PHP 8.3, 8.4)
+  - Test matrix (MySQL, PostgreSQL)
+```
+
+---
+
+### Performance Considerations
+
+**Startup Time:**
+```
+Target: <100ms from command to action
+
+Optimization:
+  - Lazy load modules
+  - Cache plugin discovery
+  - Parallel file operations
+  - No unnecessary validation
+```
+
+**Docker Compose:**
+```
+Bottleneck: Docker, not dcx
+
+Don't optimize:
+  - Compose file merging (docker compose does this)
+  - Container startup (Docker's job)
+  - Network creation (Docker's job)
+
+Do optimize:
+  - File discovery (cache paths)
+  - Configuration loading (parse once)
+  - Plugin discovery (cache results)
+```
+
+**Database Operations:**
+```
+Import/Export can be slow (multi-GB dumps)
+
+Optimization:
+  - Stream processing (don't load entire file)
+  - Compression (gzip)
+  - Progress indicators
+  - Parallel operations where safe
+```
+
+---
 
 ## Decisions
 

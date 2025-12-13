@@ -1473,25 +1473,53 @@ done
 
 ### Decision 3: Plugin System and Framework Detection
 
-**Plugin Structure:**
-```bash
-# Plugin layout
-plugins/oro/
-├── plugin.sh                 # Plugin entry point
-├── env.sh                    # Framework-specific environment
-├── compose/                  # Framework-specific services
-│   ├── websocket.yml
-│   ├── consumer.yml
-│   └── search.yml
-└── commands/                 # Framework-specific commands
-    ├── install.sh
-    ├── platformupdate.sh
-    └── updateurl.sh
+**CRITICAL: Fixed Plugin Structure Convention**
 
-# Plugin interface (plugin.sh must implement)
+All plugins MUST follow this exact structure for consistency and maintainability:
+
+```bash
+plugins/oro/
+├── README.md                    # Plugin overview and usage
+├── plugin.sh                    # Plugin entry point (detection + registration)
+├── commands/                    # Framework-specific commands (actions)
+│   ├── install/
+│   │   ├── README.md           # When called, available variables, examples
+│   │   └── run.sh              # Installation script
+│   ├── platformupdate/
+│   │   ├── README.md           # Documentation for this command
+│   │   └── run.sh              # Platform update script
+│   ├── updateurl/
+│   │   ├── README.md           # Documentation for this command
+│   │   └── run.sh              # URL update script
+│   └── tests/
+│       ├── README.md           # Test environment documentation
+│       └── run.sh              # Test setup/execution
+├── services/                    # Additional Docker Compose services
+│   ├── elasticsearch.yml       # Search service
+│   ├── websocket.yml           # WebSocket service
+│   └── consumer.yml            # Message queue consumer
+└── env/
+    └── defaults.sh             # Framework-specific environment variables
+```
+
+**Key Conventions:**
+1. **One directory per command** - `commands/{command-name}/`
+2. **Fixed script name** - Always `run.sh` inside command directory
+3. **Required README.md** - Every command MUST document:
+   - When it's called (trigger conditions)
+   - Available environment variables
+   - Expected behavior
+   - Usage examples
+4. **Environment variable communication** - All data passed via `DC_*` variables
+5. **Self-contained services** - Additional Docker services in `services/`
+
+**Plugin Interface (plugin.sh must implement):**
+```bash
+# plugins/oro/plugin.sh
+
 plugin_detect() {
   # Return 0 if this framework is detected, 1 otherwise
-  grep -q '"oro/' composer.json 2>/dev/null
+  [[ -f "composer.json" ]] && grep -q '"oro/' composer.json 2>/dev/null
 }
 
 plugin_name() {
@@ -1499,21 +1527,99 @@ plugin_name() {
 }
 
 plugin_init() {
-  # Load environment and commands
-  source "${PLUGIN_DIR}/env.sh"
+  # Load framework-specific environment variables
+  source "${PLUGIN_DIR}/env/defaults.sh"
   
-  # Register commands
-  register_command "install" "${PLUGIN_DIR}/commands/install.sh"
-  register_command "platformupdate" "${PLUGIN_DIR}/commands/platformupdate.sh"
-  register_command "updateurl" "${PLUGIN_DIR}/commands/updateurl.sh"
+  # Auto-register all commands from commands/ directory
+  # Each command directory contains run.sh and README.md
+  for cmd_dir in "${PLUGIN_DIR}/commands"/*/; do
+    cmd_name=$(basename "${cmd_dir}")
+    cmd_script="${cmd_dir}/run.sh"
+    
+    if [[ -f "${cmd_script}" ]]; then
+      register_command "${cmd_name}" "${cmd_script}"
+    fi
+  done
 }
 
 plugin_compose_files() {
-  # Return list of additional compose files
-  echo "${PLUGIN_DIR}/compose/websocket.yml"
-  echo "${PLUGIN_DIR}/compose/consumer.yml"
-  echo "${PLUGIN_DIR}/compose/search.yml"
+  # Return list of additional compose files from services/
+  for yml_file in "${PLUGIN_DIR}/services"/*.yml; do
+    [[ -f "${yml_file}" ]] && echo "${yml_file}"
+  done
 }
+```
+
+**Command Script Template (commands/{name}/run.sh):**
+```bash
+#!/usr/bin/env bash
+# commands/install/run.sh
+
+set -euo pipefail
+
+# All data comes from environment variables:
+# - DC_PROJECT_NAME
+# - DC_DATABASE_*
+# - DC_PHP_VERSION
+# - DC_ORO_* (plugin-specific variables from env/defaults.sh)
+
+main() {
+  msg_info "Installing Oro Platform..."
+  
+  # Use variables from environment
+  docker compose exec -T cli composer install --no-interaction
+  docker compose exec -T cli bin/console oro:install \
+    --user-name="${DC_ORO_ADMIN_USER}" \
+    --user-email="${DC_ORO_ADMIN_EMAIL}" \
+    --user-password="${DC_ORO_ADMIN_PASSWORD}" \
+    --organization-name="${DC_ORO_ORG_NAME}" \
+    --application-url="http://${DC_PROJECT_NAME}.docker.local"
+  
+  msg_success "Oro Platform installed successfully"
+}
+
+main "$@"
+```
+
+**Command README Template (commands/{name}/README.md):**
+```markdown
+# Command: install
+
+## When Called
+- User runs: `dcx install`
+- Triggered after: `dcx up -d` (first time setup)
+
+## Available Environment Variables
+
+### Core Variables (always available)
+- `DC_PROJECT_NAME` - Project name
+- `DC_DATABASE_HOST` - Database host
+- `DC_DATABASE_USER` - Database user
+- `DC_DATABASE_PASSWORD` - Database password
+- `DC_PHP_VERSION` - PHP version
+
+### Plugin Variables (from env/defaults.sh)
+- `DC_ORO_ADMIN_USER` - Admin username (default: admin)
+- `DC_ORO_ADMIN_EMAIL` - Admin email
+- `DC_ORO_ADMIN_PASSWORD` - Admin password
+- `DC_ORO_ORG_NAME` - Organization name
+
+## Expected Behavior
+1. Run composer install
+2. Execute oro:install command
+3. Set up admin user
+4. Configure application URL
+
+## Usage Examples
+```bash
+# Basic installation
+dcx install
+
+# With custom admin credentials
+DC_ORO_ADMIN_USER=superadmin \
+DC_ORO_ADMIN_PASSWORD=secret123 \
+dcx install
+```
 ```
 
 **Plugin Discovery:**
@@ -1525,6 +1631,7 @@ for plugin_dir in plugins/*/; do
     source "${plugin_file}"
     if plugin_detect; then
       DCX_PLUGIN=$(plugin_name)
+      PLUGIN_DIR="${plugin_dir}"
       plugin_init
       break
     fi
@@ -1535,17 +1642,27 @@ done
 export DCX_PLUGIN=oro  # Force Oro plugin
 ```
 
+**Why Fixed Structure:**
+1. **Predictability** - Developers know exactly where to find things
+2. **Documentation** - Every command is self-documenting with README.md
+3. **Discoverability** - Auto-registration from directory structure
+4. **Maintainability** - Consistent patterns across all plugins
+5. **Extensibility** - Easy to add new commands (just create directory)
+
 **Rationale:**
 - Plugins are completely self-contained
 - Core never imports framework code
-- Plugins register their commands dynamically
+- Commands auto-register from directory structure
+- Documentation lives next to implementation
+- All communication via environment variables (no tight coupling)
 - Easy to add new plugins without core changes
 - Plugins can be versioned independently
 
 **Alternatives Considered:**
 1. **Framework code in core**: Defeats modularity purpose
 2. **Separate binaries per framework**: Installation complexity
-3. **Configuration file registration**: Less flexible than code-based
+3. **Configuration file registration**: Less flexible, requires parsing
+4. **Flat command structure**: Hard to document, no organization
 
 ### Decision 4: Environment Variable Separation (Core vs Plugin)
 

@@ -276,34 +276,126 @@
 - [ ] 9.3 Implement database export (from tasks 8.4-8.5)
 - [ ] 9.4-9.8 (keep existing database tasks)
 
-## 10. Plugin System
+## 8. Plugin System (Fixed Structure Convention)
 - [ ] 8.1 Create bin/dcx.d/50-plugin-loader.sh
-- [ ] 8.2 Design plugin interface (plugin_detect, plugin_init, etc.)
-- [ ] 8.3 Implement plugin discovery mechanism
-- [ ] 8.4 Create command registration system
-- [ ] 8.5 Implement plugin compose file loading
-- [ ] 8.6 Add plugin environment variable loading
-- [ ] 8.7 Test plugin isolation (core works without plugins)
-- [ ] 8.8 Test plugin loading and unloading
+- [ ] 8.2 Design fixed plugin directory structure convention
+  - REQUIRED: README.md, plugin.sh, commands/, services/, env/
+  - REQUIRED: Each command has directory with run.sh + README.md
+  - REQUIRED: All data via environment variables (no arguments)
+- [ ] 8.3 Implement plugin interface (plugin_detect, plugin_init, etc.)
+  - plugin_detect() → bool (return 0 if framework detected)
+  - plugin_name() → string (return plugin name)
+  - plugin_init() → void (auto-register commands from commands/)
+  - plugin_compose_files() → array (return service YAML files)
+- [ ] 8.4 Implement plugin discovery mechanism
+  - Scan plugins/*/ directories
+  - Source plugin.sh for each plugin
+  - Call plugin_detect() to check if applicable
+  - Break on first detected plugin
+- [ ] 8.5 Implement command auto-registration from directory structure
+  - Scan plugins/{name}/commands/*/ directories
+  - For each directory: register command if run.sh exists
+  - Command name = directory name
+  - Validate run.sh is executable
+  - Validate README.md exists and non-empty
+- [ ] 8.6 Create command registration system
+  - register_command(name, script_path) function
+  - Store commands in associative array
+  - Lookup command by name when executing
+  - Route execution to correct plugin script
+- [ ] 8.7 Implement plugin compose file loading
+  - Load base compose files first
+  - Then load mode-specific compose (default/mutagen/ssh)
+  - Then load core service compose files
+  - Finally load plugin service compose files from services/
+- [ ] 8.8 Add plugin environment variable loading
+  - Source env/defaults.sh before command execution
+  - Validate no conflicts with core DC_* variables
+  - Export all variables to command script environment
+- [ ] 8.9 Implement command README.md validation
+  - Check for required sections: When Called, Available Variables, Expected Behavior, Usage Examples
+  - Warn if sections missing
+  - Generate command help from README.md
+- [ ] 8.10 Test plugin structure validation
+  - Test missing run.sh error
+  - Test missing README.md warning
+  - Test invalid directory structure
+- [ ] 8.11 Test plugin isolation (core works without plugins)
+- [ ] 8.12 Test plugin loading and unloading
+- [ ] 8.13 Test command execution with environment variables
+  - Verify all DC_* variables passed
+  - Verify plugin variables from env/defaults.sh passed
+  - Verify user overrides from .env.dcx passed
+- [ ] 8.14 Document plugin structure convention
+  - Create PLUGIN_DEVELOPMENT.md guide
+  - Example plugin template
+  - Fixed structure requirements
+  - README.md template for commands
 
-## 9. Oro Plugin
-- [ ] 9.1 Create plugins/oro directory structure
-- [ ] 9.2 Create plugins/oro/plugin.sh (detection and init)
-- [ ] 9.3 Create plugins/oro/env.sh (Oro environment variables)
-- [ ] 9.4 Create Oro-specific compose files:
-  - plugins/oro/compose/websocket.yml
-  - plugins/oro/compose/consumer.yml
-  - plugins/oro/compose/search.yml (Elasticsearch)
-- [ ] 9.5 Implement Oro commands:
-  - plugins/oro/commands/install.sh
-  - plugins/oro/commands/platformupdate.sh
-  - plugins/oro/commands/updateurl.sh
-  - plugins/oro/commands/cache-clear.sh
-  - plugins/oro/commands/cache-warmup.sh
-- [ ] 9.6 Test Oro plugin with OroCommerce 6.1
-- [ ] 9.7 Test Oro plugin with OroPlatform 6.1
-- [ ] 9.8 Document Oro plugin features
-- [ ] 9.9 Verify core works WITHOUT Oro plugin loaded
+## 9. Oro Plugin (Fixed Structure)
+- [ ] 9.1 Create plugins/oro directory structure (FIXED convention)
+  - plugins/oro/README.md (plugin overview)
+  - plugins/oro/plugin.sh (detection and init)
+  - plugins/oro/commands/ (command directories)
+  - plugins/oro/services/ (Docker Compose services)
+  - plugins/oro/env/ (environment variables)
+- [ ] 9.2 Create plugins/oro/plugin.sh
+  - Implement plugin_detect() - check for oro/ packages in composer.json
+  - Implement plugin_name() - return "oro"
+  - Implement plugin_init() - auto-register commands from commands/ directory
+  - Implement plugin_compose_files() - return service YAML files from services/
+- [ ] 9.3 Create plugins/oro/env/defaults.sh (Oro environment variables)
+  - DC_ORO_ADMIN_USER, DC_ORO_ADMIN_EMAIL, DC_ORO_ADMIN_PASSWORD
+  - DC_ORO_ORG_NAME, DC_ORO_APP_URL
+  - ORO_DB_URL, ORO_SEARCH_ENGINE_DSN, ORO_WEBSOCKET_*_DSN
+  - All derived from core DC_* variables
+- [ ] 9.4 Create Oro-specific Docker Compose services:
+  - plugins/oro/services/websocket.yml
+  - plugins/oro/services/consumer.yml
+  - plugins/oro/services/elasticsearch.yml
+- [ ] 9.5 Create command: install
+  - plugins/oro/commands/install/run.sh (installation script)
+  - plugins/oro/commands/install/README.md (documentation)
+    - When Called: dcx install, after dcx up -d
+    - Available Variables: DC_*, DC_ORO_*
+    - Expected Behavior: composer install + oro:install
+    - Usage Examples: basic and with custom credentials
+- [ ] 9.6 Create command: platformupdate
+  - plugins/oro/commands/platformupdate/run.sh (update script)
+  - plugins/oro/commands/platformupdate/README.md
+    - When Called: dcx platformupdate, after database import
+    - Available Variables: DC_*, DC_ORO_*
+    - Expected Behavior: oro:platform:update
+    - Usage Examples: basic update, with assets rebuild
+- [ ] 9.7 Create command: updateurl
+  - plugins/oro/commands/updateurl/run.sh (URL update script)
+  - plugins/oro/commands/updateurl/README.md
+    - When Called: dcx updateurl, after environment change
+    - Available Variables: DC_PROJECT_NAME, DC_ORO_APP_URL
+    - Expected Behavior: Update oro_config_value URLs
+    - Usage Examples: local development, custom domain
+- [ ] 9.8 Create command: tests
+  - plugins/oro/commands/tests/run.sh (test environment script)
+  - plugins/oro/commands/tests/README.md
+    - When Called: dcx tests [command]
+    - Available Variables: DC_*, test-specific overrides
+    - Expected Behavior: Isolated test environment
+    - Usage Examples: bin/phpunit, bin/behat
+- [ ] 9.9 Create plugins/oro/README.md (plugin documentation)
+  - Plugin Overview: Oro Platform/Commerce/CRM support
+  - Detection Logic: oro/ packages in composer.json
+  - Commands: List all commands with links to README
+  - Services: WebSocket, consumer, Elasticsearch
+  - Environment Variables: DC_ORO_* variables reference
+- [ ] 9.10 Test command auto-registration
+  - Verify all commands/ subdirectories are discovered
+  - Verify run.sh validation (exists + executable)
+  - Verify README.md validation (exists + non-empty)
+- [ ] 9.11 Test Oro plugin with OroCommerce 6.1
+- [ ] 9.12 Test Oro plugin with OroPlatform 6.1
+- [ ] 9.13 Test Oro plugin with OroCRM 6.1
+- [ ] 9.14 Verify core works WITHOUT Oro plugin loaded
+- [ ] 9.15 Document plugin structure for future framework adapters
 
 ## 10. Core Functionality (No Plugin Required)
 - [ ] 10.1 Verify core works standalone (no plugins)

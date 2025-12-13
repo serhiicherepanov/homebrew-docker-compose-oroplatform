@@ -68,35 +68,35 @@ The system SHALL define standard interface that framework adapters must implemen
 - **AND** it SHALL document all framework-specific variables
 
 ### Requirement: Oro Framework Adapter
-The system SHALL provide Oro Platform framework adapter maintaining 100% backward compatibility.
+The system SHALL provide Oro Platform framework adapter with full support for OroPlatform, OroCommerce, and OroCRM.
 
 #### Scenario: Oro framework detection
 - **WHEN** detecting Oro framework
 - **THEN** it SHALL check for "oro/" packages in composer.json
 - **AND** it SHALL check for "oroinc/" packages
-- **AND** it SHALL check for bin/console with Oro-specific commands
+- **AND** it SHALL check for bin/console with oro:* commands
 
 #### Scenario: Oro-specific commands
 - **WHEN** Oro adapter is active
 - **THEN** it SHALL provide commands:
-  - install: Full Oro installation
-  - platformupdate/updateplatform: Oro platform update
-  - updateurl/seturl: Update application URLs
-  - cache:clear, cache:warmup: Symfony cache commands
-  - importdb/exportdb: Database management
-  - composer install integration
-- **AND** all SHALL work exactly as current orodc implementation
+  - install: Full Oro installation workflow
+  - platformupdate: Oro platform update (oro:platform:update)
+  - updateurl: Update application URLs for local development
+  - cache:clear, cache:warmup: Symfony cache management
+  - importdb/exportdb: Oro database dump management with DEFINER cleanup
+- **AND** all commands SHALL work with Oro 5.x and 6.x versions
 
 #### Scenario: Oro environment variables
 - **WHEN** Oro adapter initializes
-- **THEN** it SHALL set:
-  - ORO_DB_URL, ORO_DB_DSN: Database connection
-  - ORO_SEARCH_URL, ORO_SEARCH_DSN: Elasticsearch connection
-  - ORO_MQ_DSN: RabbitMQ connection
-  - ORO_REDIS_URL, ORO_REDIS_*_DSN: Redis connections
-  - ORO_WEBSOCKET_*_DSN: WebSocket configuration
-  - ORO_SECRET: Application secret
-- **AND** it SHALL maintain DC_ORO_* variable compatibility
+- **THEN** it SHALL set Oro-specific environment variables:
+  - ORO_DB_URL, ORO_DB_DSN: Database connection strings
+  - ORO_SEARCH_ENGINE_DSN: Elasticsearch with oro_search prefix
+  - ORO_WEBSITE_SEARCH_ENGINE_DSN: Elasticsearch with oro_website_search prefix
+  - ORO_MQ_DSN: RabbitMQ AMQP connection
+  - ORO_SESSION_DSN, ORO_REDIS_*_DSN: Redis databases (0-3)
+  - ORO_WEBSOCKET_*_DSN: WebSocket server configuration
+  - ORO_SECRET: Application secret key
+- **AND** these SHALL be derived from DC_* infrastructure variables
 
 #### Scenario: Oro WebSocket support
 - **WHEN** Oro adapter manages services
@@ -173,52 +173,38 @@ The system SHALL support framework-specific Docker base images while maintaining
 - **AND** it SHALL build from framework-specific base image
 - **AND** it SHALL include project-specific dependencies
 
-### Requirement: Backward Compatibility Layer
-The system SHALL maintain 100% backward compatibility with existing orodc installations during transition.
+### Requirement: Migration Documentation
+The system SHALL provide comprehensive documentation for users migrating from legacy OroDC v0.x.
 
-#### Scenario: Command name compatibility
-- **WHEN** user invokes "orodc" command
-- **THEN** it SHALL work identically to current implementation
-- **AND** it SHALL automatically use Oro framework adapter
-- **AND** it SHALL support all existing commands and flags
+#### Scenario: Migration guide availability
+- **WHEN** user needs to migrate from OroDC v0.x to WebStack v1.0
+- **THEN** migration guide SHALL be available in documentation
+- **AND** guide SHALL explain all breaking changes
+- **AND** guide SHALL provide step-by-step migration instructions
 
-#### Scenario: Environment variable compatibility
-- **WHEN** user uses DC_ORO_* variables
-- **THEN** they SHALL continue working without changes
-- **AND** they SHALL be mapped to new DC_* variables internally
-- **AND** no deprecation warnings SHALL appear initially
+#### Scenario: Environment variable mapping
+- **WHEN** migration guide documents variable changes
+- **THEN** it SHALL provide clear mapping table:
+  - DC_ORO_NAME → DC_PROJECT_NAME
+  - DC_ORO_PHP_VERSION → DC_PHP_VERSION
+  - DC_ORO_DATABASE_* → DC_DATABASE_*
+  - .env.orodc → .env.webstack
+  - ~/.orodc/ → ~/.webstack/
+- **AND** it SHALL include examples for each variable
 
-#### Scenario: Configuration file compatibility
-- **WHEN** user has existing .env.orodc file
-- **THEN** it SHALL continue working
-- **AND** it SHALL be loaded and parsed correctly
-- **AND** variables SHALL be available in containers
+#### Scenario: Command equivalence table
+- **WHEN** migration guide documents command changes
+- **THEN** it SHALL show command equivalence:
+  - orodc install → webstack install (with Oro adapter)
+  - orodc up → webstack up
+  - orodc platformupdate → webstack platformupdate
+- **AND** it SHALL note that functionality remains identical
 
-#### Scenario: Docker Compose compatibility
-- **WHEN** using existing docker-compose.yml files
-- **THEN** they SHALL continue working
-- **AND** all services SHALL start correctly
-- **AND** all volumes and networks SHALL remain compatible
-
-### Requirement: Migration Support
-The system SHALL provide tools and documentation for migrating from orodc to framework-agnostic webstack.
-
-#### Scenario: Migration detection
-- **WHEN** user has existing orodc installation
-- **THEN** system SHALL detect old configuration
-- **AND** it SHALL offer to migrate to new structure
-- **AND** migration SHALL be optional, not forced
-
-#### Scenario: Variable migration warnings
-- **WHEN** migration mode is enabled
-- **THEN** it SHALL show deprecation warnings for DC_ORO_* variables
-- **AND** warnings SHALL include new variable names
-- **AND** warnings SHALL be suppressible via flag
-
-#### Scenario: Migration guide
-- **WHEN** user accesses migration documentation
-- **THEN** it SHALL provide step-by-step migration instructions
-- **AND** it SHALL include examples for common scenarios
-- **AND** it SHALL document breaking changes
-- **AND** it SHALL provide rollback instructions
+#### Scenario: Side-by-side installation support
+- **WHEN** user wants both old and new versions
+- **THEN** documentation SHALL explain:
+  - Different Homebrew formulas can coexist
+  - Different configuration directories (~/.orodc vs ~/.webstack)
+  - How to use each version for different projects
+- **AND** it SHALL provide troubleshooting for common issues
 

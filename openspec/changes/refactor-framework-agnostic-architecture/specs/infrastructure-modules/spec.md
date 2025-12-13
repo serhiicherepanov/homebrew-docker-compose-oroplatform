@@ -156,9 +156,9 @@ The system SHALL provide SSH access module for remote development and CI/CD scen
 
 #### Scenario: SSH key management
 - **WHEN** SSH service starts
-- **THEN** it SHALL persist host keys across restarts
+- **THEN** it SHALL persist host keys in volume across container restarts
 - **AND** it SHALL support public key authentication
-- **AND** it SHALL allow ORO_SSH_PUBLIC_KEY environment variable
+- **AND** it SHALL allow DC_SSH_PUBLIC_KEY environment variable for authorized keys
 
 #### Scenario: SSH container capabilities
 - **WHEN** user connects via SSH
@@ -193,14 +193,14 @@ The system SHALL provide standardized environment variables for infrastructure c
 The system SHALL manage port allocations for infrastructure services to avoid conflicts.
 
 #### Scenario: Port prefix configuration
-- **WHEN** user sets DC_ORO_PORT_PREFIX
+- **WHEN** user sets DC_PORT_PREFIX environment variable
 - **THEN** it SHALL calculate all service ports from prefix:
   - Nginx: ${PREFIX}80
   - Search: ${PREFIX}00
   - MQ: ${PREFIX}72
   - Mail: ${PREFIX}25
   - SSH: 2222 (fixed)
-- **AND** this SHALL allow multiple projects without conflicts
+- **AND** this SHALL allow multiple projects to run simultaneously without port conflicts
 
 #### Scenario: Bind host configuration
 - **WHEN** exposing service ports

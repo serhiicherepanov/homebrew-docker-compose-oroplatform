@@ -2,10 +2,11 @@
 
 ## 1. Analysis and Preparation
 - [ ] 1.1 Document all existing functions and their dependencies
-- [ ] 1.2 Map current environment variables to new naming scheme
+- [ ] 1.2 Design clean environment variable naming scheme (DC_*)
 - [ ] 1.3 Identify Oro-specific vs framework-agnostic code
 - [ ] 1.4 Create module dependency graph
 - [ ] 1.5 Design test strategy for modular architecture
+- [ ] 1.6 Finalize project naming (webstack vs alternatives)
 
 ## 2. Core System Module
 - [ ] 2.1 Create bin/webstack.d/00-core.sh
@@ -24,10 +25,10 @@
 
 ## 4. Environment Module
 - [ ] 4.1 Create bin/webstack.d/20-env.sh
-- [ ] 4.2 Extract environment variable initialization
-- [ ] 4.3 Implement dual naming support (DC_ORO_* and DC_*)
-- [ ] 4.4 Add deprecation warning system
-- [ ] 4.5 Extract .env file loading logic
+- [ ] 4.2 Implement clean environment variable initialization (DC_*)
+- [ ] 4.3 Add framework-agnostic defaults
+- [ ] 4.4 Extract .env file loading logic (.env.webstack)
+- [ ] 4.5 Add environment validation functions
 - [ ] 4.6 Add environment resolution tests
 
 ## 5. Pipeline Module
@@ -67,12 +68,13 @@
 
 ## 9. Oro Framework Adapter
 - [ ] 9.1 Create bin/webstack-frameworks.d/oro.sh
-- [ ] 9.2 Extract Oro-specific commands (platformupdate, cache:*, etc.)
-- [ ] 9.3 Implement Oro environment variable setup
-- [ ] 9.4 Add Oro-specific command detection
-- [ ] 9.5 Extract Oro database import/export logic
-- [ ] 9.6 Test Oro adapter with existing projects
-- [ ] 9.7 Verify 100% backward compatibility
+- [ ] 9.2 Implement Oro-specific commands (platformupdate, cache:*, updateurl, etc.)
+- [ ] 9.3 Set up Oro environment variables (ORO_DB_URL, ORO_SEARCH_DSN, etc.)
+- [ ] 9.4 Add Oro-specific command detection and routing
+- [ ] 9.5 Implement Oro database import/export with cleanup
+- [ ] 9.6 Add WebSocket and consumer container support
+- [ ] 9.7 Test Oro adapter with OroCommerce/OroPlatform projects
+- [ ] 9.8 Document Oro-specific features and commands
 
 ## 10. Generic Framework Adapter
 - [ ] 10.1 Create bin/webstack-frameworks.d/generic.sh
@@ -89,28 +91,36 @@
 - [ ] 11.5 Add version and help commands
 - [ ] 11.6 Test complete execution flow
 
-## 12. Backward Compatibility Layer
-- [ ] 12.1 Create orodc symlink to webstack
-- [ ] 12.2 Add DC_ORO_* variable compatibility
-- [ ] 12.3 Implement command name detection
-- [ ] 12.4 Test all existing orodc commands
-- [ ] 12.5 Verify existing workflows unchanged
-- [ ] 12.6 Create compatibility test suite
+## 12. Configuration Management
+- [ ] 12.1 Implement .env.webstack file loading
+- [ ] 12.2 Add configuration directory management (~/.webstack/)
+- [ ] 12.3 Support DC_CONFIG_DIR environment variable override
+- [ ] 12.4 Add configuration validation
+- [ ] 12.5 Document configuration best practices
+- [ ] 12.6 Test configuration loading in various scenarios
 
 ## 13. Compose File Reorganization
-- [ ] 13.1 Separate framework-agnostic compose files
-- [ ] 13.2 Create framework-specific compose directories
-- [ ] 13.3 Update compose file loading logic
-- [ ] 13.4 Migrate Oro-specific compose files
-- [ ] 13.5 Test compose file resolution
-- [ ] 13.6 Verify service definitions intact
+- [ ] 13.1 Create clean framework-agnostic base compose files
+- [ ] 13.2 Organize framework-specific compose in subdirectories:
+  - compose/frameworks/oro/
+  - compose/frameworks/magento/
+  - compose/frameworks/generic/
+- [ ] 13.3 Update compose file loading logic for new structure
+- [ ] 13.4 Implement framework-based compose file selection
+- [ ] 13.5 Test compose file resolution and merging
+- [ ] 13.6 Verify all services work correctly
 
 ## 14. Docker Image Strategy
-- [ ] 14.1 Audit existing Docker images for Oro-specific content
-- [ ] 14.2 Create framework-agnostic base images (if needed)
-- [ ] 14.3 Maintain oro-specific images for compatibility
-- [ ] 14.4 Update image naming conventions
+- [ ] 14.1 Design new image naming: ghcr.io/digitalspacestdio/webstack-*
+- [ ] 14.2 Create framework-agnostic base images:
+  - webstack-php:8.3-node20
+  - webstack-php:8.4-node22
+- [ ] 14.3 Create framework-specific images:
+  - webstack-oro:8.3-node20 (Oro-optimized)
+  - webstack-magento:8.3-node20 (future)
+- [ ] 14.4 Set up automated image builds in CI/CD
 - [ ] 14.5 Test image building and caching
+- [ ] 14.6 Publish images to GitHub Container Registry
 
 ## 15. Documentation Updates
 - [ ] 15.1 Update README.md for framework-agnostic usage
@@ -121,13 +131,15 @@
 - [ ] 15.6 Add architecture diagrams
 - [ ] 15.7 Create troubleshooting guide for modular architecture
 
-## 16. Homebrew Formula Updates
-- [ ] 16.1 Update Formula name (keep old for compatibility)
-- [ ] 16.2 Add webstack binary to installation
-- [ ] 16.3 Update formula dependencies
-- [ ] 16.4 Create symlink for orodc command
-- [ ] 16.5 Update formula test suite
-- [ ] 16.6 Test formula installation and upgrade path
+## 16. Homebrew Formula Creation
+- [ ] 16.1 Create NEW Formula/webstack.rb (separate from old orodc)
+- [ ] 16.2 Configure webstack binary installation
+- [ ] 16.3 Set up formula dependencies (docker, docker-compose, etc.)
+- [ ] 16.4 Add module directory installation (webstack.d/, webstack-frameworks.d/)
+- [ ] 16.5 Create comprehensive formula test suite
+- [ ] 16.6 Test formula installation from scratch
+- [ ] 16.7 Document formula in README
+- [ ] 16.8 Keep old docker-compose-oroplatform formula for legacy support
 
 ## 17. CI/CD Updates
 - [ ] 17.1 Update GitHub Actions workflows
@@ -138,13 +150,15 @@
 - [ ] 17.6 Verify CI/CD passes for all scenarios
 
 ## 18. Integration Testing
-- [ ] 18.1 Test Oro Platform projects
-- [ ] 18.2 Test OroCommerce projects
-- [ ] 18.3 Test OroCRM projects
-- [ ] 18.4 Test generic Symfony projects
-- [ ] 18.5 Test migration from old to new environment variables
-- [ ] 18.6 Test all special commands (install, purge, tests, etc.)
-- [ ] 18.7 Verify performance matches or exceeds current implementation
+- [ ] 18.1 Test with Oro Platform 6.1 projects
+- [ ] 18.2 Test with OroCommerce 6.1 projects
+- [ ] 18.3 Test with OroCRM projects
+- [ ] 18.4 Test with generic Symfony 6.x/7.x projects
+- [ ] 18.5 Test with Laravel projects (generic adapter)
+- [ ] 18.6 Test all infrastructure services (database, Redis, Elasticsearch, RabbitMQ)
+- [ ] 18.7 Test all special commands (install, purge, tests, ssh, etc.)
+- [ ] 18.8 Performance testing vs legacy OroDC
+- [ ] 18.9 Load testing with multiple projects
 
 ## 19. Performance Optimization
 - [ ] 19.1 Profile module loading time
@@ -153,17 +167,26 @@
 - [ ] 19.4 Benchmark against monolithic version
 - [ ] 19.5 Ensure <100ms overhead target met
 
-## 20. Release Preparation
-- [ ] 20.1 Version bump to 0.9.0 (internal refactoring)
-- [ ] 20.2 Create changelog with migration notes
-- [ ] 20.3 Update all documentation
-- [ ] 20.4 Create release notes
-- [ ] 20.5 Tag release
-- [ ] 20.6 Announce changes to users
+## 20. Release Preparation (v1.0.0)
+- [ ] 20.1 Complete all documentation rewrite
+- [ ] 20.2 Create comprehensive CHANGELOG.md
+- [ ] 20.3 Write migration guide from OroDC v0.x to WebStack v1.0
+- [ ] 20.4 Create release notes highlighting new features
+- [ ] 20.5 Set up GitHub Releases page
+- [ ] 20.6 Prepare announcement blog post/documentation
+- [ ] 20.7 Beta testing period (2-4 weeks)
+- [ ] 20.8 Address beta feedback
+- [ ] 20.9 Tag v1.0.0 release
+- [ ] 20.10 Publish Homebrew formula
+- [ ] 20.11 Announce release to community
 
-## 21. Future Framework Adapters (Post-Release)
-- [ ] 21.1 Design Magento adapter (future)
-- [ ] 21.2 Design Laravel adapter (future)
-- [ ] 21.3 Create plugin development guide
-- [ ] 21.4 Establish plugin registry/marketplace (future)
+## 21. Post-v1.0 Roadmap
+- [ ] 21.1 Magento 2 framework adapter (v1.1)
+- [ ] 21.2 Laravel framework adapter (v1.2)
+- [ ] 21.3 WordPress framework adapter (v1.3)
+- [ ] 21.4 Drupal framework adapter (v1.4)
+- [ ] 21.5 Plugin development guide and SDK
+- [ ] 21.6 Plugin marketplace/registry (v2.0)
+- [ ] 21.7 Web UI for project management (v2.0)
+- [ ] 21.8 Cloud deployment integrations (v2.1)
 

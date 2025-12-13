@@ -81,18 +81,18 @@ compose/
 
 ### Goals
 - **Modular Architecture**: Split monolithic script into logical, testable modules
-- **Framework Agnostic**: Extract Oro-specific logic into replaceable adapters
-- **Backward Compatible**: Existing Oro installations continue working without changes
+- **Framework Agnostic**: Clean separation of infrastructure and framework-specific code
+- **Clean Design**: No legacy compatibility code, modern architecture from scratch
 - **Plugin System**: Enable framework-specific extensions through plugins
 - **Reusable Infrastructure**: Share database, webserver, cache modules across frameworks
-- **Easy Migration**: Clear upgrade path from `orodc` to framework-agnostic tool
+- **Production Ready**: Build v1.0 with solid foundations for future growth
 
 ### Non-Goals
 - **Not rewriting in another language**: Keep bash for simplicity and portability
 - **Not changing Docker Compose approach**: Continue using Docker Compose as orchestration
-- **Not removing Oro support**: Oro remains first-class citizen, just modular
-- **Not breaking existing workflows**: All current commands continue working
-- **Not adding new frameworks in this change**: Focus on architecture, add Magento later
+- **Not removing Oro support**: Oro remains supported through dedicated adapter
+- **Not maintaining backward compatibility**: This is a clean break redesign (v0.x → v1.0)
+- **Not adding all frameworks immediately**: Start with Oro + Generic, add others incrementally
 
 ## Decisions
 
@@ -203,72 +203,79 @@ module_database_healthcheck() # Check database health
 
 ### Decision 4: Environment Variable Naming
 
-**Strategy: Dual naming with migration period**
+**Strategy: Clean framework-agnostic naming from day one**
 
-**Phase 1: Support both old and new names**
+**New clean naming scheme:**
 ```bash
-# New generic names (preferred)
-DC_PROJECT_NAME=${DC_PROJECT_NAME:-}
-DC_PHP_VERSION=${DC_PHP_VERSION:-}
-DC_DATABASE_HOST=${DC_DATABASE_HOST:-}
+# Project configuration
+DC_PROJECT_NAME=${DC_PROJECT_NAME:-$(basename $(pwd))}
+DC_FRAMEWORK=${DC_FRAMEWORK:-auto}
 
-# Old Oro names (backward compatibility)
-DC_ORO_NAME=${DC_ORO_NAME:-}
-DC_ORO_PHP_VERSION=${DC_ORO_PHP_VERSION:-}
-DC_ORO_DATABASE_HOST=${DC_ORO_DATABASE_HOST:-}
+# PHP/Node versions
+DC_PHP_VERSION=${DC_PHP_VERSION:-8.4}
+DC_NODE_VERSION=${DC_NODE_VERSION:-22}
+DC_COMPOSER_VERSION=${DC_COMPOSER_VERSION:-2}
 
-# Resolution: old names take precedence if set
-DC_PROJECT_NAME=${DC_ORO_NAME:-${DC_PROJECT_NAME:-$(basename $(pwd))}}
-DC_PHP_VERSION=${DC_ORO_PHP_VERSION:-${DC_PHP_VERSION:-8.4}}
-```
+# Database configuration
+DC_DATABASE_HOST=${DC_DATABASE_HOST:-database}
+DC_DATABASE_PORT=${DC_DATABASE_PORT:-5432}
+DC_DATABASE_USER=${DC_DATABASE_USER:-app}
+DC_DATABASE_PASSWORD=${DC_DATABASE_PASSWORD:-app}
+DC_DATABASE_DBNAME=${DC_DATABASE_DBNAME:-app}
+DC_DATABASE_SCHEMA=${DC_DATABASE_SCHEMA:-pgsql}  # pgsql, mysql
 
-**Phase 2: Deprecation warnings**
-```bash
-if [[ -n "${DC_ORO_NAME:-}" ]]; then
-  msg_warning "DC_ORO_NAME is deprecated, use DC_PROJECT_NAME instead"
-fi
-```
+# Infrastructure services
+DC_REDIS_HOST=${DC_REDIS_HOST:-redis}
+DC_SEARCH_HOST=${DC_SEARCH_HOST:-search}
+DC_MQ_HOST=${DC_MQ_HOST:-mq}
 
-**Phase 3: Remove old names (future major version)**
-
-**Rationale:**
-- Zero breakage for existing users
-- Clear migration path
-- Warnings educate users about new naming
-- Can remove old names in next major version
-
-**Alternatives Considered:**
-1. **Break everything at once**: Unacceptable for production users
-2. **Keep both forever**: Creates confusion and maintenance burden
-3. **Automatic migration script**: Complex and error-prone
-
-### Decision 5: Command Naming and Aliases
-
-**Strategy:**
-- New command: `webstack` (framework-agnostic)
-- Old command: `orodc` (symlink to webstack, maintained for compatibility)
-- Framework-specific behavior determined by adapter, not command name
-
-```bash
-# webstack determines behavior from project context
-cd ~/orocommerce && webstack up    # Uses Oro adapter
-cd ~/magento && webstack up        # Uses Magento adapter
-cd ~/symfony && webstack up        # Uses Symfony adapter
-
-# orodc forces Oro adapter (backward compatibility)
-cd ~/magento && orodc up           # Still uses Oro adapter (legacy behavior)
+# Configuration paths
+DC_CONFIG_DIR=${DC_CONFIG_DIR:-$HOME/.webstack/${DC_PROJECT_NAME}}
+DC_APP_DIR=${DC_APP_DIR:-/var/www}
 ```
 
 **Rationale:**
-- Clear branding for framework-agnostic tool
-- Perfect backward compatibility
-- No confusion about which command to use
-- Future: deprecate orodc command
+- Clean, self-explanatory names
+- No legacy prefixes (ORO)
+- Framework-agnostic from start
+- Consistent naming pattern
+- Easy to remember and document
 
 **Alternatives Considered:**
-1. **Keep orodc name**: Misleading for non-Oro projects
+1. **Keep DC_ORO_* naming**: Misleading for non-Oro projects, legacy baggage
+2. **Remove DC_ prefix entirely**: Conflicts with other Docker tools
+3. **Use WEBSTACK_ prefix**: Too long, DC_ is established pattern
+
+### Decision 5: Command Naming
+
+**Strategy: Single clean command name**
+- **Command**: `webstack` (framework-agnostic, universal)
+- **No aliases**: Clean break from old naming
+- **Framework detection**: Automatic based on project context
+
+```bash
+# webstack automatically detects and adapts to framework
+cd ~/orocommerce && webstack up    # Auto-detects Oro, uses Oro adapter
+cd ~/magento && webstack up        # Auto-detects Magento, uses Magento adapter  
+cd ~/symfony && webstack up        # Auto-detects Symfony, uses generic adapter
+
+# Explicit framework override when needed
+DC_FRAMEWORK=oro webstack up       # Force Oro adapter
+DC_FRAMEWORK=magento webstack up   # Force Magento adapter
+```
+
+**Rationale:**
+- Clean, professional naming
+- Framework-agnostic brand identity
+- Auto-detection provides excellent UX
+- No legacy confusion
+- One command to learn
+
+**Alternatives Considered:**
+1. **Keep orodc name**: Misleading and limits adoption for non-Oro users
 2. **Require framework in command**: Too verbose (webstack-oro, webstack-magento)
-3. **Multiple binaries**: Installation and maintenance complexity
+3. **Multiple binaries**: Installation complexity, user confusion
+4. **Generic name like "devstack"**: Already taken by OpenStack project
 
 ## Risks / Trade-offs
 
@@ -291,61 +298,80 @@ cd ~/magento && orodc up           # Still uses Oro adapter (legacy behavior)
 - **Documentation**: Security best practices for plugin development
 - **Future**: Plugin signing and verification system
 
-## Migration Plan
+## Release Plan
 
-### Phase 1: Internal Refactoring (0.9.0)
-- Split orodc into modules under bin/orodc.d/
-- Maintain orodc command name
-- All existing functionality works identically
-- Add comprehensive test coverage
+### v1.0.0: Clean Break Release
 
-### Phase 2: Introduce webstack Command (1.0.0)
-- Add bin/webstack as new entry point
-- orodc becomes symlink to webstack
-- Both commands work identically for Oro projects
-- Documentation shows webstack as primary command
+**Release Strategy:**
+- Brand new tool: WebStack v1.0
+- Old tool continues as OroDC v0.x (maintenance mode)
+- Both available via different Homebrew formulas
 
-### Phase 3: Framework Detection (1.1.0)
-- Implement automatic framework detection
-- Add framework adapter loading system
-- Extract Oro-specific code into oro.sh adapter
-- Add basic Magento adapter support
+**Development Approach:**
+1. Build complete v1.0 in new branch
+2. Comprehensive testing with all supported frameworks
+3. Complete documentation rewrite
+4. Beta testing period with early adopters
+5. Official v1.0 release
 
-### Phase 4: Deprecation Warnings (2.0.0)
-- orodc command shows deprecation warning
-- Old environment variables (DC_ORO_*) show warnings
-- Documentation updated to use new names exclusively
-- Migration guide published
+**Homebrew Formula Strategy:**
+```bash
+# Old version (maintenance mode, Oro-only)
+brew install digitalspacestdio/tap/docker-compose-oroplatform
 
-### Phase 5: Full Migration (3.0.0)
-- Remove orodc command
-- Remove support for DC_ORO_* variables
-- Framework adapters fully mature
-- Plugin system documentation complete
+# New version (v1.0, all frameworks)
+brew install digitalspacestdio/tap/webstack
+```
 
-### Rollback Strategy
-- Each phase is non-breaking
-- Users can stay on older versions indefinitely
-- Symlink-based approach allows easy rollback
-- Old variable names supported for at least 2 major versions
+**User Migration Path:**
+- **No forced upgrades**: Users choose when to migrate
+- **Migration guide**: Step-by-step documentation
+- **Side-by-side installation**: Both tools can coexist
+- **Different config directories**: 
+  - Old: `~/.orodc/`
+  - New: `~/.webstack/`
+
+**Legacy OroDC Maintenance:**
+- Critical bug fixes only
+- Security updates
+- No new features
+- Documented end-of-life timeline (e.g., 12 months)
+
+**Benefits of Clean Break:**
+- ✅ No legacy code bloat
+- ✅ Optimal architecture without constraints
+- ✅ Clear versioning (v0.x = old, v1.x = new)
+- ✅ Better performance
+- ✅ Easier maintenance
+- ✅ Modern codebase
 
 ## Open Questions
 
 1. **Module Loading Performance**: Should we implement lazy loading for unused modules?
-   - **Proposal**: Profile first, optimize only if needed
+   - **Proposal**: Profile first, optimize only if needed (likely not necessary for bash)
 
 2. **Plugin Distribution**: How should third-party framework adapters be distributed?
-   - **Proposal**: Start with official adapters only, add plugin system in v2.0
+   - **Proposal**: Start with official adapters only, add plugin marketplace in v2.0
 
-3. **Configuration File**: Should we introduce a .webstackrc or similar configuration file?
-   - **Proposal**: Environment variables sufficient for now, add config file if needed
+3. **Configuration File**: Should we introduce a .webstackrc or .webstack.yml configuration file?
+   - **Proposal**: Environment variables sufficient for v1.0, consider config file for v1.1
 
-4. **Multi-Framework Projects**: How to handle projects using multiple frameworks?
-   - **Proposal**: Explicit DC_FRAMEWORK variable required for ambiguous cases
+4. **Multi-Framework Projects**: How to handle projects using multiple frameworks (e.g., Symfony + Laravel)?
+   - **Proposal**: Explicit DC_FRAMEWORK variable required, document common patterns
 
-5. **Docker Image Naming**: Should we maintain oro-specific images or create generic ones?
-   - **Proposal**: Keep existing images for backward compatibility, add generic variants
+5. **Docker Image Strategy**: Should we rebrand images from "orodc-*" to "webstack-*"?
+   - **Proposal**: 
+     - New images: `ghcr.io/digitalspacestdio/webstack-php:8.4-node22`
+     - Framework-specific: `ghcr.io/digitalspacestdio/webstack-oro:8.4-node22`
+     - Old images remain for legacy OroDC v0.x
 
 6. **Testing Strategy**: How to test all framework adapters without slowing CI/CD?
-   - **Proposal**: Parallel testing, matrix strategy across framework adapters
+   - **Proposal**: Matrix strategy with parallel jobs per framework adapter
+
+7. **Project Naming**: Final decision on tool name?
+   - **Options**: webstack, phpstack, devstack (taken), dockerstack
+   - **Proposal**: "WebStack" - professional, clear, available
+
+8. **Framework Adapter API Stability**: Should we freeze adapter API in v1.0?
+   - **Proposal**: Mark adapter API as "stable" in v1.0, use semantic versioning for changes
 

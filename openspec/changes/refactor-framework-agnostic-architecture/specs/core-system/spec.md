@@ -45,18 +45,18 @@ The core system SHALL initialize the environment with appropriate defaults and c
 - **WHEN** configuration directory does not exist
 - **THEN** it SHALL create the configuration directory
 - **AND** it SHALL set appropriate permissions
-- **AND** it SHALL respect DC_ORO_CONFIG_DIR environment variable override
+- **AND** it SHALL respect DC_CONFIG_DIR environment variable override
 
 ### Requirement: Configuration Directory Management
 The core system SHALL manage project-specific configuration directories for storing generated compose files, cached data, and certificates.
 
 #### Scenario: Default configuration directory location
-- **WHEN** DC_ORO_CONFIG_DIR is not set
-- **THEN** it SHALL use $HOME/.orodc/${PROJECT_NAME} as default
+- **WHEN** DC_CONFIG_DIR is not set
+- **THEN** it SHALL use $HOME/.webstack/${PROJECT_NAME} as default
 - **AND** it SHALL create the directory if it doesn't exist
 
 #### Scenario: Custom configuration directory location
-- **WHEN** DC_ORO_CONFIG_DIR environment variable is set
+- **WHEN** DC_CONFIG_DIR environment variable is set
 - **THEN** it SHALL use the specified directory
 - **AND** it SHALL create the directory if it doesn't exist
 - **AND** this SHALL enable project-local configurations for CI/CD
@@ -73,7 +73,7 @@ The core system SHALL support custom SSL certificates for building Docker images
 #### Scenario: Detect project certificates
 - **WHEN** project has a .crt directory with certificate files
 - **THEN** it SHALL prepare build context with certificates
-- **AND** it SHALL copy certificates to ${DC_ORO_CONFIG_DIR}/docker/project-php-node-symfony/.crt
+- **AND** it SHALL copy certificates to ${DC_CONFIG_DIR}/docker/project-php-node-symfony/.crt
 - **AND** it SHALL log the number of certificates found
 
 #### Scenario: Build images with custom certificates
@@ -127,7 +127,7 @@ The core system SHALL work correctly on Linux, macOS Intel, and macOS Apple Sili
 - **WHEN** searching for compose files
 - **THEN** it SHALL try paths in order:
   1. ${BREW_PREFIX}/Homebrew/Library/Taps/.../compose (development)
-  2. ${BREW_PREFIX}/share/docker-compose-oroplatform/compose (installed)
+  2. ${BREW_PREFIX}/share/webstack/compose (installed)
   3. ${SCRIPT_DIR}/../compose (relative fallback)
 - **AND** it SHALL use the first path that exists
 

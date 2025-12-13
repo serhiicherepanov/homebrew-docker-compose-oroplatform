@@ -386,28 +386,378 @@ brew install bats-core
 
 ---
 
-## Final Recommendation: **Go Core**
+## Practical Reality Check
 
-**Why Go wins:**
-1. ✅ **Testing is mandatory** - v1.0 needs solid test coverage
-2. ✅ **Production ready** - type safety prevents entire class of bugs
-3. ✅ **Future proof** - rolling updates, scaling, monitoring all easier
-4. ✅ **Better error handling** - explicit errors, stack traces
-5. ✅ **Plugin flexibility** - exec interface supports any language
-6. ✅ **Performance** - bonus, not main reason
-7. ✅ **Single binary** - easier distribution than multi-file bash
+### Go Disadvantages (Real World)
 
-**Trade-offs accepted:**
-- ❌ Higher initial development cost (worth it for v1.0)
-- ❌ Compilation required (Homebrew handles this)
-- ❌ Fewer bash contributors (but attract Go community)
+**Compilation Complexity:**
+```bash
+# Current (Bash):
+brew install dcx       # Instant - just copy script
+dcx up                 # Works immediately
 
-**Implementation timeline:**
-- Weeks 1-2: Core architecture in Go
-- Weeks 3-4: Docker Compose integration
-- Weeks 5-6: Plugin system
-- Weeks 7-8: Oro plugin (bash initially)
-- Week 9+: Testing, refinement
+# With Go:
+brew install dcx       # Must compile from source OR
+                       # Maintain bottles for every platform:
+                       # - macOS x86_64
+                       # - macOS arm64 (M1/M2/M3)
+                       # - Linux x86_64
+                       # - Linux arm64
+```
+
+**Homebrew Formula Complexity:**
+```ruby
+# Bash (simple):
+class Dcx < Formula
+  desc "Docker Compose eXtended"
+  url "https://github.com/.../dcx-1.0.0.tar.gz"
+  
+  def install
+    bin.install "dcx"
+    (share/"dcx").install Dir["compose", "plugins"]
+  end
+end
+
+# Go (complex):
+class Dcx < Formula
+  desc "Docker Compose eXtended"
+  url "https://github.com/.../dcx-1.0.0.tar.gz"
+  
+  depends_on "go" => :build  # Build dependency
+  
+  def install
+    # Must compile for this platform
+    system "go", "build", "-o", "dcx"
+    bin.install "dcx"
+    
+    # Still need compose files
+    (share/"dcx").install Dir["compose", "plugins"]
+  end
+  
+  # Need bottles for fast installation
+  bottle do
+    sha256 cellar: :any_skip_relocation, arm64_sonoma: "..."
+    sha256 cellar: :any_skip_relocation, arm64_ventura: "..."
+    sha256 cellar: :any_skip_relocation, sonoma: "..."
+    sha256 cellar: :any_skip_relocation, ventura: "..."
+    sha256 cellar: :any_skip_relocation, x86_64_linux: "..."
+  end
+end
+```
+
+**Distribution:**
+- Bash: Works everywhere Docker works (100% of target platforms)
+- Go: Need to compile for each platform, or users compile on install (slow)
+- Node.js: Requires Node runtime (extra dependency)
+
+**Development Speed:**
+```bash
+# Bash development cycle:
+1. Edit dcx.d/database.sh
+2. dcx importdb test.sql
+   # Works immediately
+
+# Go development cycle:
+1. Edit pkg/database/import.go
+2. go build -o dcx
+3. ./dcx importdb test.sql
+   # Extra compilation step every time
+```
+
+**Contributor Barrier:**
+- Everyone doing Docker knows bash
+- Not everyone knows Go
+- Node.js is known but runtime dependency sucks
+
+---
+
+## Revised Recommendation: **Modularized Bash with Engineering Rigor**
+
+### Why Bash Actually Wins for This Use Case
+
+**1. Perfect for Docker Orchestration**
+```bash
+# This is literally our main job:
+docker compose -f file1.yml -f file2.yml up -d
+
+# Bash is PERFECT for this - just exec
+exec docker compose "${compose_files[@]}" up -d
+```
+
+**2. Zero Installation Friction**
+```bash
+brew install dcx    # Instant, works on all platforms
+dcx up             # Just works, no compilation
+```
+
+**3. Universal Compatibility**
+- ✅ macOS (Intel and Apple Silicon) - same script
+- ✅ Linux (x86_64 and ARM) - same script
+- ✅ No cross-compilation needed
+- ✅ No bottles to maintain
+
+**4. Rapid Development**
+- Edit script → test immediately
+- No build step
+- Faster iteration
+
+**5. Lower Contributor Barrier**
+- Everyone knows bash
+- Easy to contribute
+- No language to learn
+
+---
+
+### Making Modular Bash Production-Ready
+
+**Use bats for Testing:**
+```bash
+# Install
+brew install bats-core
+
+# test/database-import.bats
+@test "detects PostgreSQL schema" {
+  export DC_DATABASE_SCHEMA="pgsql"
+  run dcx importdb test.sql
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "PostgreSQL" ]]
+}
+
+@test "handles compressed files" {
+  run dcx importdb test.sql.gz
+  [ "$status" -eq 0 ]
+}
+
+# Run tests
+bats test/
+```
+
+**Use shellcheck for Static Analysis:**
+```bash
+# Install
+brew install shellcheck
+
+# CI/CD validation
+shellcheck bin/dcx bin/dcx.d/*.sh plugins/**/*.sh
+
+# Catches common bugs:
+# - Undefined variables
+# - Syntax errors
+# - Quoting issues
+# - Logic errors
+```
+
+**Use strict mode:**
+```bash
+#!/bin/bash
+set -euo pipefail  # Exit on error, undefined vars, pipe failures
+IFS=$'\n\t'        # Sane IFS
+
+# Modern bash practices
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+```
+
+**Modular Architecture:**
+```bash
+dcx/
+├── bin/dcx                      # ~100 lines entry point
+└── dcx.d/
+    ├── 00-core.sh               # ~200 lines
+    ├── 10-utils.sh              # ~150 lines
+    ├── 20-env.sh                # ~200 lines
+    ├── 30-cli.sh                # ~200 lines
+    ├── 40-database.sh           # ~200 lines
+    └── 50-plugin-loader.sh      # ~150 lines
+
+Total: ~1200 lines (vs 2386 monolithic)
+Each module: testable, focused, understandable
+```
+
+**Modern Bash Features:**
+```bash
+# Arrays (not just strings)
+compose_files=(
+    "compose/base.yml"
+    "compose/modes/${DC_MODE}.yml"
+)
+
+# Associative arrays (hash maps)
+declare -A service_ports=(
+    [nginx]=80
+    [database]=5432
+    [redis]=6379
+)
+
+# Functions with return values
+get_database_schema() {
+    local schema="${DC_DATABASE_SCHEMA:-}"
+    if [[ -z "$schema" ]]; then
+        # Auto-detect
+        schema=$(detect_from_compose)
+    fi
+    echo "$schema"
+}
+
+# Proper error handling
+import_database() {
+    local file="$1"
+    
+    if [[ ! -f "$file" ]]; then
+        error "File not found: $file"
+        return 1
+    fi
+    
+    # ... import logic
+}
+```
+
+---
+
+## Final Recommendation: **Bash + Good Engineering**
+
+### Implementation Strategy
+
+**Phase 1: Modular Bash Core (Weeks 1-3)**
+```bash
+dcx (bash)
+├── Core modules
+├── Compose management
+├── Config handling
+├── Plugin loader
+└── Database ops
+```
+
+**Phase 2: Testing Infrastructure (Week 4)**
+```bash
+- bats tests (unit-style)
+- shellcheck in CI/CD
+- Integration tests with Docker
+- Coverage reporting
+```
+
+**Phase 3: Plugins (Weeks 5-7)**
+```bash
+plugins/oro/
+├── plugin.sh          # Bash
+├── commands/          # Bash scripts
+└── compose/           # YAML files
+```
+
+**Phase 4: Documentation & Release (Week 8)**
+```bash
+- Complete docs
+- Migration guide
+- CI/CD polish
+- v1.0 release
+```
+
+---
+
+### When to Consider Go (Future)
+
+**If/when we need:**
+1. **Performance critical operations** (current: Docker is bottleneck, not bash)
+2. **Complex algorithms** (current: just orchestration)
+3. **Type-heavy APIs** (current: just CLI and env vars)
+4. **gRPC/protobuf** (current: not needed)
+5. **Heavy concurrent operations** (current: Docker handles this)
+
+**Reality for v1.0:**
+- We're orchestrating Docker Compose (bash excels at this)
+- We're parsing YAML (docker compose does this)
+- We're executing commands (bash excels at this)
+- We're managing files (bash excels at this)
+
+---
+
+### Testing Strategy (Bash)
+
+**Unit-Style Tests with bats:**
+```bash
+# test/core/compose-loader.bats
+@test "loads base compose file" {
+  run load_compose_files
+  [[ "$output" =~ "compose/base.yml" ]]
+}
+
+@test "loads mode-specific file" {
+  DC_MODE=mutagen run load_compose_files
+  [[ "$output" =~ "compose/modes/mutagen.yml" ]]
+}
+
+# test/database/import.bats
+@test "detects gzip files" {
+  run detect_compression "test.sql.gz"
+  [ "$status" -eq 0 ]
+  [ "$output" = "gzip" ]
+}
+```
+
+**Integration Tests:**
+```bash
+# test/integration/full-install.bats
+@test "full Oro installation" {
+  run dcx install
+  [ "$status" -eq 0 ]
+  
+  # Check services are running
+  run dcx ps
+  [[ "$output" =~ "database" ]]
+  [[ "$output" =~ "nginx" ]]
+}
+```
+
+**CI/CD with GitHub Actions:**
+```yaml
+name: Test
+on: [push, pull_request]
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-14]  # Intel + ARM
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          brew install bats-core shellcheck
+      
+      - name: Shellcheck
+        run: shellcheck bin/dcx bin/dcx.d/*.sh
+      
+      - name: Unit tests
+        run: bats test/
+      
+      - name: Integration tests
+        run: bats test/integration/
+```
+
+---
+
+## Conclusion: Bash is the Right Choice
+
+**For dcx v1.0, Bash wins because:**
+
+1. ✅ **Zero friction installation** - works everywhere instantly
+2. ✅ **No cross-compilation** - same script on all platforms
+3. ✅ **Perfect for the job** - orchestrating Docker Compose
+4. ✅ **Fast development** - no compilation step
+5. ✅ **Lower barrier** - everyone knows bash
+6. ✅ **Testable** - bats provides proper testing
+7. ✅ **Maintainable** - shellcheck catches bugs
+8. ✅ **Proven** - current OroDC works well
+
+**We accept these limitations:**
+- No type safety (mitigated by shellcheck + tests)
+- No fancy features (we don't need them)
+- Bash quirks (mitigated by strict mode + modern practices)
+
+**Future:** If we truly need Go features, we can rewrite core while keeping plugins in bash. But for v1.0, overengineering with Go adds complexity without solving real problems.
 
 ## Core Architecture (Language Agnostic)
 

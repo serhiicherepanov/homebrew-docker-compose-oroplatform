@@ -16,13 +16,31 @@
   - Individual service compose files
 - [ ] 1.6 Finalize project naming (dcx confirmed)
 
-## 2. Core System Module
-- [ ] 2.1 Create bin/dcx.d/00-core.sh
-- [ ] 2.2 Extract Docker Compose orchestration functions
-- [ ] 2.3 Implement core compose file loading logic
-- [ ] 2.4 Add core environment initialization
-- [ ] 2.5 Write unit tests for core functions
-- [ ] 2.6 Validate backward compatibility
+## 2. Core System Module (Bash)
+- [ ] 2.1 Create bin/dcx entry point (~100 lines)
+  - Strict mode: set -euo pipefail
+  - Module loader
+  - Command dispatcher
+- [ ] 2.2 Create bin/dcx.d/00-core.sh
+  - Docker Compose orchestration functions
+  - Compose file loading logic
+  - Command execution wrapper
+- [ ] 2.3 Add bats test framework setup
+  - Install instructions
+  - Test directory structure
+  - Example tests
+- [ ] 2.4 Add shellcheck configuration
+  - .shellcheckrc
+  - CI/CD integration
+  - Local validation script
+- [ ] 2.5 Write bats tests for core functions
+  - Test compose file loading
+  - Test Docker Compose command building
+  - Test error handling
+- [ ] 2.6 Document bash coding standards
+  - Modern bash features to use
+  - Error handling patterns
+  - Testing approach
 
 ## 3. Utilities Module
 - [ ] 3.1 Create bin/dcx.d/10-utils.sh

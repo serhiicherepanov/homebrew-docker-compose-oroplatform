@@ -1,0 +1,82 @@
+{
+  "name": "magento",
+  "version": "1.0.0",
+  "description": "Magento 2.x plugin for DCX",
+  "homepage": "https://github.com/digitalspacestdio/dcx-plugin-magento",
+  "author": "DigitalSpace Team",
+  
+  "detection": {
+    "priority": 90,
+    "rules": [
+      {
+        "type": "composer_packages",
+        "description": "Detect by Magento packages",
+        "packages": [
+          "magento/product-community-edition",
+          "magento/product-enterprise-edition",
+          "magento/framework"
+        ],
+        "match": "any"
+      },
+      {
+        "type": "file_exists",
+        "description": "Check for Magento-specific structure",
+        "files": [
+          "app/etc/env.php",
+          "bin/magento",
+          "composer.json"
+        ],
+        "match": "all"
+      },
+      {
+        "type": "directory_structure",
+        "description": "Verify Magento directory layout",
+        "directories": [
+          "app/code",
+          "app/design",
+          "pub/static",
+          "var/cache"
+        ],
+        "match": "all"
+      },
+      {
+        "type": "json_field",
+        "description": "Check Magento type in composer.json",
+        "file": "composer.json",
+        "field": "type",
+        "value": "project",
+        "operator": "equals"
+      }
+    ]
+  },
+  
+  "requirements": {
+    "dcx": ">=1.0.0",
+    "php": ">=8.1 <8.4",
+    "services": ["database", "redis", "elasticsearch"]
+  },
+  
+  "provides": {
+    "commands": [
+      "setup:install",
+      "setup:upgrade",
+      "cache:flush",
+      "indexer:reindex",
+      "deploy:mode:set"
+    ],
+    "services": [
+      "elasticsearch",
+      "varnish",
+      "redis-session",
+      "rabbitmq"
+    ]
+  },
+  
+  "config": {
+    "default_php_version": "8.2",
+    "default_node_version": "18",
+    "default_database": "mysql",
+    "supported_magento_versions": ["2.4.5", "2.4.6", "2.4.7"]
+  }
+}
+

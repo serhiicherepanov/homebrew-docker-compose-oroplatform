@@ -1471,9 +1471,18 @@ done
 2. **Include directives**: Docker Compose doesn't support well
 3. **Template generation**: Too complex, harder to debug
 
-### Decision 3: Plugin System and Framework Detection
+### Decision 3: Plugin System with JSON Manifest and Dynamic Detection
 
-**CRITICAL: Fixed Plugin Structure Convention**
+**CRITICAL: Plugin Discovery and Framework Detection**
+
+**Flow:**
+1. DCX finds all installed plugins (Homebrew formulas `dcx-plugin-*`)
+2. DCX reads `plugin.json` manifest from each plugin
+3. Each manifest declares detection rules (composer packages, files, patterns)
+4. DCX validates current project against all plugin rules
+5. First matching plugin is selected and initialized
+
+**Plugin Structure with JSON Manifest:**
 
 All plugins MUST follow this exact structure for consistency and maintainability:
 

@@ -1,0 +1,81 @@
+{
+  "name": "laravel",
+  "version": "1.0.0",
+  "description": "Laravel plugin for DCX",
+  "homepage": "https://github.com/digitalspacestdio/dcx-plugin-laravel",
+  "author": "DigitalSpace Team",
+  
+  "detection": {
+    "priority": 70,
+    "rules": [
+      {
+        "type": "composer_packages",
+        "description": "Detect by Laravel framework package",
+        "packages": [
+          "laravel/framework"
+        ],
+        "match": "any"
+      },
+      {
+        "type": "file_exists",
+        "description": "Check for Laravel-specific files",
+        "files": [
+          "artisan",
+          "composer.json",
+          "bootstrap/app.php"
+        ],
+        "match": "all"
+      },
+      {
+        "type": "file_content",
+        "description": "Check artisan contains Laravel namespace",
+        "file": "artisan",
+        "patterns": [
+          "Illuminate\\\\Foundation",
+          "Laravel"
+        ],
+        "match": "any"
+      },
+      {
+        "type": "directory_structure",
+        "description": "Verify Laravel directory layout",
+        "directories": [
+          "app/Http",
+          "app/Models",
+          "routes",
+          "resources/views"
+        ],
+        "match": "all"
+      }
+    ]
+  },
+  
+  "requirements": {
+    "dcx": ">=1.0.0",
+    "php": ">=8.1",
+    "node": ">=16",
+    "services": ["database", "redis"]
+  },
+  
+  "provides": {
+    "commands": [
+      "migrate",
+      "db:seed",
+      "queue:work",
+      "cache:clear",
+      "route:list"
+    ],
+    "services": [
+      "redis",
+      "mailhog"
+    ]
+  },
+  
+  "config": {
+    "default_php_version": "8.3",
+    "default_node_version": "20",
+    "default_database": "mysql",
+    "supported_laravel_versions": ["10.x", "11.x"]
+  }
+}
+

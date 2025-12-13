@@ -1,0 +1,74 @@
+{
+  "name": "oro",
+  "version": "1.0.0",
+  "description": "Oro Platform/Commerce/CRM plugin for DCX",
+  "homepage": "https://github.com/digitalspacestdio/dcx-plugin-oro",
+  "author": "DigitalSpace Team",
+  
+  "detection": {
+    "priority": 80,
+    "rules": [
+      {
+        "type": "composer_packages",
+        "description": "Detect by Oro packages in composer.json",
+        "packages": [
+          "oro/platform",
+          "oro/commerce",
+          "oro/crm",
+          "oro/platform-application"
+        ],
+        "match": "any"
+      },
+      {
+        "type": "file_exists",
+        "description": "Check for Oro-specific files",
+        "files": [
+          "bin/console",
+          "composer.json",
+          "config/config.yml"
+        ],
+        "match": "all"
+      },
+      {
+        "type": "file_content",
+        "description": "Check composer.json contains 'oro/' packages",
+        "file": "composer.json",
+        "patterns": [
+          "\"oro/platform\"",
+          "\"oro/commerce\"",
+          "\"oro/crm\""
+        ],
+        "match": "any"
+      }
+    ]
+  },
+  
+  "requirements": {
+    "dcx": ">=1.0.0",
+    "php": ">=8.1 <8.6",
+    "node": ">=18",
+    "services": ["database", "redis", "message-broker"]
+  },
+  
+  "provides": {
+    "commands": [
+      "install",
+      "platformupdate",
+      "updateurl",
+      "tests"
+    ],
+    "services": [
+      "elasticsearch",
+      "websocket",
+      "consumer"
+    ]
+  },
+  
+  "config": {
+    "default_php_version": "8.3",
+    "default_node_version": "20",
+    "default_database": "pgsql",
+    "supported_oro_versions": ["5.1", "6.0", "6.1"]
+  }
+}
+

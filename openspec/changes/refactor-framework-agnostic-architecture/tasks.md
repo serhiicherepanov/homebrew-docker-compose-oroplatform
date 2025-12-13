@@ -323,6 +323,66 @@
   - Test log_json() output
   - Test validation with valid/invalid JSON
 
+## 7b. Plugin Discovery via JSON Manifest
+- [ ] 7b.1 Define plugin.json manifest structure
+  - name, version, description, homepage, author
+  - detection.priority (0-100)
+  - detection.rules[] (array of detection rules)
+  - requirements (dcx version, PHP, Node, services)
+  - provides (commands, services)
+  - config (defaults)
+- [ ] 7b.2 Design detection rule types
+  - composer_packages: detect by Composer dependencies
+  - npm_packages: detect by npm dependencies
+  - pip_packages: detect by Python requirements
+  - file_exists: detect by file/directory existence
+  - directory_structure: detect by directory layout
+  - file_content: detect by patterns in files
+  - json_field: detect by JSON field values
+- [ ] 7b.3 Create plugin manifest examples
+  - examples/plugin-oro.json (Oro Platform)
+  - examples/plugin-magento.json (Magento 2.x)
+  - examples/plugin-laravel.json (Laravel)
+- [ ] 7b.4 Implement plugin discovery in bin/dcx.d/48-plugin-discovery.sh
+  - discover_plugins() - scan Homebrew formulas dcx-plugin-*
+  - Search paths: project/.dcx/plugins, ~/.dcx/plugins, Homebrew, built-in
+  - Load and validate plugin.json manifests
+  - Return list of valid plugin manifests
+- [ ] 7b.5 Implement detection rule validators
+  - detect_composer_packages() - check composer.json
+  - detect_npm_packages() - check package.json
+  - detect_file_exists() - check files exist
+  - detect_directory_structure() - verify directory tree
+  - detect_file_content() - grep patterns in files
+  - detect_json_field() - jq field value check
+- [ ] 7b.6 Implement plugin selection logic
+  - Run all detection rules for each plugin
+  - Combine rules with AND logic (all must pass)
+  - Collect matching plugins with priorities
+  - Sort by priority (descending)
+  - Select highest priority plugin
+  - Export DCX_PLUGIN, DCX_PLUGIN_MANIFEST
+- [ ] 7b.7 Handle no plugin match
+  - Default to "generic" plugin
+  - Log warning about no specific framework detected
+  - Generic plugin provides basic PHP/Node functionality
+- [ ] 7b.8 Support explicit plugin selection
+  - Check DCX_PLUGIN environment variable
+  - Skip auto-detection if set
+  - Load specified plugin directly
+  - Error if plugin doesn't exist
+- [ ] 7b.9 Create plugin CLI commands
+  - dcx plugins list - show all installed plugins
+  - dcx plugins info <name> - show plugin details
+  - dcx plugins detect - run detection for current project
+  - dcx plugins validate <name> - validate plugin manifest
+- [ ] 7b.10 Write tests for plugin discovery
+  - Test manifest parsing and validation
+  - Test each detection rule type
+  - Test priority-based selection
+  - Test explicit plugin selection
+  - Test no-match fallback to generic
+
 ## 8. Plugin System (Fixed Structure Convention + JSON)
 - [ ] 8.1 Create bin/dcx.d/50-plugin-loader.sh
 - [ ] 8.2 Design fixed plugin directory structure convention

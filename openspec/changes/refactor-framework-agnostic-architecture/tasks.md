@@ -14,10 +14,10 @@
   - Core without plugins
   - Core + Oro plugin
   - Individual service compose files
-- [ ] 1.6 Finalize project naming (webstack confirmed)
+- [ ] 1.6 Finalize project naming (dcx confirmed)
 
 ## 2. Core System Module
-- [ ] 2.1 Create bin/webstack.d/00-core.sh
+- [ ] 2.1 Create bin/dcx.d/00-core.sh
 - [ ] 2.2 Extract Docker Compose orchestration functions
 - [ ] 2.3 Implement core compose file loading logic
 - [ ] 2.4 Add core environment initialization
@@ -25,22 +25,22 @@
 - [ ] 2.6 Validate backward compatibility
 
 ## 3. Utilities Module
-- [ ] 3.1 Create bin/webstack.d/10-utils.sh
+- [ ] 3.1 Create bin/dcx.d/10-utils.sh
 - [ ] 3.2 Extract message formatting functions (msg_info, msg_error, etc.)
 - [ ] 3.3 Extract binary resolution functions (resolve_bin)
 - [ ] 3.4 Add utility function tests
 - [ ] 3.5 Document utility function API
 
 ## 4. Environment Module
-- [ ] 4.1 Create bin/webstack.d/20-env.sh
+- [ ] 4.1 Create bin/dcx.d/20-env.sh
 - [ ] 4.2 Implement clean environment variable initialization (DC_*)
 - [ ] 4.3 Add framework-agnostic defaults
-- [ ] 4.4 Extract .env file loading logic (.env.webstack)
+- [ ] 4.4 Extract .env file loading logic (.env.dcx)
 - [ ] 4.5 Add environment validation functions
 - [ ] 4.6 Add environment resolution tests
 
 ## 5. Pipeline Module
-- [ ] 5.1 Create bin/webstack.d/30-pipeline.sh
+- [ ] 5.1 Create bin/dcx.d/30-pipeline.sh
 - [ ] 5.2 Extract argument parsing logic
 - [ ] 5.3 Implement command routing system
 - [ ] 5.4 Add command detection functions
@@ -48,7 +48,7 @@
 - [ ] 5.6 Write pipeline integration tests
 
 ## 6. Compose Management Module
-- [ ] 6.1 Create bin/webstack.d/40-compose.sh
+- [ ] 6.1 Create bin/dcx.d/40-compose.sh
 - [ ] 6.2 Extract compose file management functions
 - [ ] 6.3 Implement profile caching system
 - [ ] 6.4 Add DSN parsing functions
@@ -57,12 +57,12 @@
 - [ ] 6.7 Test compose file merging logic
 
 ## 7. Core CLI Commands (Framework-Agnostic)
-- [ ] 7.1 Create bin/webstack.d/30-cli.sh (generic CLI commands)
+- [ ] 7.1 Create bin/dcx.d/30-cli.sh (generic CLI commands)
 - [ ] 7.2 Implement database commands:
-  - webstack psql (PostgreSQL CLI)
-  - webstack mysql (MySQL CLI)
-  - webstack database-cli (generic DB shell)
-- [ ] 7.3 Create bin/webstack.d/40-database.sh (import/export)
+  - dcx psql (PostgreSQL CLI)
+  - dcx mysql (MySQL CLI)
+  - dcx database-cli (generic DB shell)
+- [ ] 7.3 Create bin/dcx.d/40-database.sh (import/export)
 - [ ] 7.4 Implement database import:
   - Support .sql and .sql.gz formats
   - Auto-detect database schema
@@ -73,14 +73,14 @@
   - Timestamped filenames
   - MySQL DEFINER cleanup
 - [ ] 7.6 Implement container commands:
-  - webstack ssh (SSH access)
-  - webstack cli (CLI container bash)
-  - webstack bash (alias for cli)
+  - dcx ssh (SSH access)
+  - dcx cli (CLI container bash)
+  - dcx bash (alias for cli)
 - [ ] 7.7 Test all CLI commands without plugins
 - [ ] 7.8 Document core CLI command usage
 
 ## 8. Plugin System
-- [ ] 8.1 Create bin/webstack.d/50-plugin-loader.sh
+- [ ] 8.1 Create bin/dcx.d/50-plugin-loader.sh
 - [ ] 8.2 Design plugin interface (plugin_detect, plugin_init, etc.)
 - [ ] 8.3 Implement plugin discovery mechanism
 - [ ] 8.4 Create command registration system
@@ -111,25 +111,25 @@
 ## 10. Core Functionality (No Plugin Required)
 - [ ] 10.1 Verify core works standalone (no plugins)
 - [ ] 10.2 Test basic commands:
-  - webstack up -d
-  - webstack down
-  - webstack ps
-  - webstack logs
+  - dcx up -d
+  - dcx down
+  - dcx ps
+  - dcx logs
 - [ ] 10.3 Test database operations:
-  - webstack importdb dump.sql
-  - webstack exportdb
-  - webstack psql / mysql
+  - dcx importdb dump.sql
+  - dcx exportdb
+  - dcx psql / mysql
 - [ ] 10.4 Test PHP commands:
-  - webstack php -v
-  - webstack composer install
-  - webstack ssh
-  - webstack cli bash
+  - dcx php -v
+  - dcx composer install
+  - dcx ssh
+  - dcx cli bash
 - [ ] 10.5 Test with plain Symfony projects (no plugin)
 - [ ] 10.6 Test with plain Laravel projects (no plugin)
 - [ ] 10.7 Document "core only" usage
 
 ## 11. Main Entry Point
-- [ ] 11.1 Create bin/webstack main entry point
+- [ ] 11.1 Create bin/dcx main entry point
 - [ ] 11.2 Implement module loading system
 - [ ] 11.3 Add module initialization order
 - [ ] 11.4 Implement framework adapter bootstrapping
@@ -137,8 +137,8 @@
 - [ ] 11.6 Test complete execution flow
 
 ## 12. Configuration Management
-- [ ] 12.1 Implement .env.webstack file loading
-- [ ] 12.2 Add configuration directory management (~/.webstack/)
+- [ ] 12.1 Implement .env.dcx file loading
+- [ ] 12.2 Add configuration directory management (~/.dcx/)
 - [ ] 12.3 Support DC_CONFIG_DIR environment variable override
 - [ ] 12.4 Add configuration validation
 - [ ] 12.5 Document configuration best practices
@@ -228,20 +228,20 @@
 - [ ] 16.6 Verify core works without Oro services
 
 ## 17. Docker Image Strategy
-- [ ] 14.1 Design new image naming: ghcr.io/digitalspacestdio/webstack-*
+- [ ] 14.1 Design new image naming: ghcr.io/digitalspacestdio/dcx-*
 - [ ] 14.2 Create framework-agnostic base images:
-  - webstack-php:8.3-node20
-  - webstack-php:8.4-node22
+  - dcx-php:8.3-node20
+  - dcx-php:8.4-node22
 - [ ] 14.3 Create framework-specific images:
-  - webstack-oro:8.3-node20 (Oro-optimized)
-  - webstack-magento:8.3-node20 (future)
+  - dcx-oro:8.3-node20 (Oro-optimized)
+  - dcx-magento:8.3-node20 (future)
 - [ ] 14.4 Set up automated image builds in CI/CD
 - [ ] 14.5 Test image building and caching
 - [ ] 14.6 Publish images to GitHub Container Registry
 
 ## 15. Documentation Updates
 - [ ] 15.1 Update README.md for framework-agnostic usage
-- [ ] 15.2 Create migration guide from orodc to webstack
+- [ ] 15.2 Create migration guide from orodc to dcx
 - [ ] 15.3 Document module architecture
 - [ ] 15.4 Create framework adapter development guide
 - [ ] 15.5 Update AGENTS.md with new conventions
@@ -249,10 +249,10 @@
 - [ ] 15.7 Create troubleshooting guide for modular architecture
 
 ## 18. Homebrew Formula Creation
-- [ ] 16.1 Create NEW Formula/webstack.rb (separate from old orodc)
-- [ ] 16.2 Configure webstack binary installation
+- [ ] 16.1 Create NEW Formula/dcx.rb (separate from old orodc)
+- [ ] 16.2 Configure dcx binary installation
 - [ ] 16.3 Set up formula dependencies (docker, docker-compose, etc.)
-- [ ] 16.4 Add module directory installation (webstack.d/, webstack-frameworks.d/)
+- [ ] 16.4 Add module directory installation (dcx.d/, dcx-frameworks.d/)
 - [ ] 16.5 Create comprehensive formula test suite
 - [ ] 16.6 Test formula installation from scratch
 - [ ] 16.7 Document formula in README

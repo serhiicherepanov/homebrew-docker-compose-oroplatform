@@ -1,10 +1,10 @@
-# Change: Refactor OroDC into Framework-Agnostic Architecture
+# Change: Refactor OroDC into Framework-Agnostic DCX
 
 ## Why
 
-OroDC is currently tightly coupled to Oro Platform products (OroCRM, OroCommerce, OroPlatform), making it impossible to reuse for other PHP frameworks and CMS platforms like Magento, Laravel, Symfony, or WordPress. The monolithic 2386-line bash script combines core Docker Compose orchestration, infrastructure management, and Oro-specific business logic into a single file, creating maintenance challenges and preventing extensibility.
+OroDC is currently tightly coupled to Oro Platform products (OroCRM, OroCommerce, OroPlatform), making it impossible to reuse for other frameworks and CMS platforms like Magento, Laravel, Symfony, or WordPress. The monolithic 2386-line bash script combines core Docker Compose orchestration, infrastructure management, and Oro-specific business logic into a single file, creating maintenance challenges and preventing extensibility.
 
-This is a **clean break redesign** - we're building the next generation of the tool without legacy constraints. Users wanting Oro-specific features can continue using the old version while we build something better and more universal.
+This is a **clean break redesign** - we're building DCX (Docker Compose eXtended), a universal tool for any language stack and any environment (dev, staging, production). Users wanting Oro-specific features can continue using the old version while we build something better and more universal.
 
 ## What Changes
 
@@ -44,9 +44,12 @@ This is a **clean break redesign** - we're building the next generation of the t
   - Framework-specific Docker services
   - Framework-specific configurations
 
-- **BREAKING** Rename project to "webstack"
+- **BREAKING** Rename project to "dcx" (Docker Compose eXtended)
+- **BREAKING** Rename binary from `orodc` to `dcx`
 - **BREAKING** Replace `DC_ORO_*` with minimal `DC_*` core variables
 - **BREAKING** Move all Oro functionality to oro-plugin
+- **BREAKING** Configuration directory: `~/.orodc/` → `~/.dcx/`
+- **BREAKING** Environment file: `.env.orodc` → `.env.dcx`
 
 ## Impact
 
@@ -60,21 +63,22 @@ This is a **clean break redesign** - we're building the next generation of the t
 - **MODIFIED** `ssl-certificate-management` - Adapt to new modular architecture
 
 ### Affected Code
-- **NEW** `bin/webstack` - Main entry point (replaces orodc)
-- **NEW** `bin/webstack.d/*` - Modular core system
-- **NEW** `bin/webstack-frameworks.d/*` - Framework adapters
+- **NEW** `bin/dcx` - Main entry point (replaces orodc, 3 chars!)
+- **NEW** `bin/dcx.d/*` - Modular core system
+- **NEW** `plugins/*` - Framework plugins
 - **REMOVED** `bin/orodc` - Old monolithic script removed
-- **RENAMED** `Formula/docker-compose-oroplatform.rb` → `Formula/webstack.rb`
+- **RENAMED** `Formula/docker-compose-oroplatform.rb` → `Formula/dcx.rb`
 - **REORGANIZED** `compose/*.yml` - Clean framework-agnostic and framework-specific separation
 - **REORGANIZED** `compose/docker/` - Framework-specific configurations in subdirectories
 - **REWRITTEN** `.github/workflows/` - New CI/CD for modular architecture
 - **REWRITTEN** `README.md`, `AGENTS.md` - Framework-agnostic documentation
 
 ### Breaking Changes
-- **Command name**: `orodc` → `webstack`
+- **Command name**: `orodc` → `dcx` (3 chars!)
 - **Environment variables**: `DC_ORO_*` → `DC_*` (clean naming)
-- **Homebrew formula**: `docker-compose-oroplatform` → `webstack`
-- **Configuration directory**: `~/.orodc/` → `~/.webstack/`
+- **Homebrew formula**: `docker-compose-oroplatform` → `dcx`
+- **Configuration directory**: `~/.orodc/` → `~/.dcx/`
+- **Environment file**: `.env.orodc` → `.env.dcx`
 - **Project structure**: Complete reorganization
 
 ### Benefits
@@ -89,8 +93,17 @@ This is a **clean break redesign** - we're building the next generation of the t
 
 ### Migration Strategy for Users
 - Old version remains available as `orodc` v0.x in separate branch
-- New version is `webstack` v1.0 - clean start
+- New version is `dcx` v1.0 - clean start
 - Users choose when to migrate (no forced upgrades)
 - Migration guide provides step-by-step instructions
 - Both versions can coexist (different Homebrew formulas)
+
+### Why "dcx"?
+- **DC** = Docker Compose (clear purpose)
+- **X** = eXtended/eXtensible (universal, not framework-specific)
+- **3 chars** = super short to type (dcx vs orodc vs webstack)
+- **Environment agnostic** = works in dev, staging, and production
+- **Language agnostic** = works with PHP, Ruby, Node.js, any stack
+- **No "dev" limitation** = can be used for production deployments
+- **Future proof** = can add rolling updates, scaling, orchestration features
 

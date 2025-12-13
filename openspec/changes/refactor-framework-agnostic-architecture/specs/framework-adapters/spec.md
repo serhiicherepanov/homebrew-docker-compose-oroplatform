@@ -27,7 +27,7 @@ The system SHALL dynamically load framework adapters and integrate them with the
 
 #### Scenario: Load framework adapter file
 - **WHEN** framework is detected
-- **THEN** it SHALL construct adapter file path: ${WEBSTACK_FRAMEWORKS_DIR}/{framework}.sh
+- **THEN** it SHALL construct adapter file path: ${DCX_FRAMEWORKS_DIR}/{framework}.sh
 - **AND** it SHALL source the adapter file if it exists
 - **AND** if adapter file doesn't exist, it SHALL fall back to generic.sh
 
@@ -141,8 +141,8 @@ The system SHALL support third-party framework adapters through plugin mechanism
 #### Scenario: Plugin directory discovery
 - **WHEN** looking for framework adapters
 - **THEN** it SHALL check official adapter directory first
-- **AND** it SHALL check user plugin directory: ~/.webstack/plugins/
-- **AND** it SHALL check project plugin directory: .webstack/plugins/
+- **AND** it SHALL check user plugin directory: ~/.dcx/plugins/
+- **AND** it SHALL check project plugin directory: .dcx/plugins/
 
 #### Scenario: Plugin security
 - **WHEN** loading third-party plugins
@@ -163,8 +163,8 @@ The system SHALL support framework-specific Docker base images while maintaining
 - **WHEN** framework adapter specifies base image
 - **THEN** it SHALL use framework-specific image:
   - Oro: ghcr.io/digitalspacestdio/orodc-php-node-symfony
-  - Magento: ghcr.io/digitalspacestdio/webstack-magento
-  - Generic: ghcr.io/digitalspacestdio/webstack-php
+  - Magento: ghcr.io/digitalspacestdio/dcx-magento
+  - Generic: ghcr.io/digitalspacestdio/dcx-php
 - **AND** images SHALL be versioned by PHP/Node versions
 
 #### Scenario: Custom image builds
@@ -188,23 +188,23 @@ The system SHALL provide comprehensive documentation for users migrating from le
   - DC_ORO_NAME → DC_PROJECT_NAME
   - DC_ORO_PHP_VERSION → DC_PHP_VERSION
   - DC_ORO_DATABASE_* → DC_DATABASE_*
-  - .env.orodc → .env.webstack
-  - ~/.orodc/ → ~/.webstack/
+  - .env.orodc → .env.dcx
+  - ~/.orodc/ → ~/.dcx/
 - **AND** it SHALL include examples for each variable
 
 #### Scenario: Command equivalence table
 - **WHEN** migration guide documents command changes
 - **THEN** it SHALL show command equivalence:
-  - orodc install → webstack install (with Oro adapter)
-  - orodc up → webstack up
-  - orodc platformupdate → webstack platformupdate
+  - orodc install → dcx install (with Oro adapter)
+  - orodc up → dcx up
+  - orodc platformupdate → dcx platformupdate
 - **AND** it SHALL note that functionality remains identical
 
 #### Scenario: Side-by-side installation support
 - **WHEN** user wants both old and new versions
 - **THEN** documentation SHALL explain:
   - Different Homebrew formulas can coexist
-  - Different configuration directories (~/.orodc vs ~/.webstack)
+  - Different configuration directories (~/.orodc vs ~/.dcx)
   - How to use each version for different projects
 - **AND** it SHALL provide troubleshooting for common issues
 

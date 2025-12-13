@@ -2,7 +2,17 @@
 
 ## Context
 
-OroDC was originally built as a CLI tool specifically for Oro Platform products. The tool has proven valuable for Docker-based PHP development, but its tight coupling to Oro limits reusability. The monolithic architecture makes it difficult to:
+OroDC was originally built as a CLI tool specifically for Oro Platform products. The tool has proven valuable for Docker-based development, but its tight coupling to Oro limits reusability. The monolithic architecture makes it difficult to:
+
+**New Tool Name: dcx (Docker Compose eXtended)**
+- **3 characters** - super fast to type
+- **DC** = Docker Compose - clear purpose
+- **X** = eXtended/eXtensible - universal applicability
+- **Environment agnostic** - dev, staging, production
+- **Language agnostic** - PHP, Ruby, Node.js, Python, any stack
+- **No framework assumptions** - works with or without plugins
+
+The monolithic OroDC architecture makes it difficult to:
 
 - Add support for other PHP frameworks (Magento, Laravel, Symfony)
 - Maintain and test individual components
@@ -101,8 +111,8 @@ compose/
 **Structure:**
 ```
 bin/
-├── webstack                              # Minimal entry point (~100 lines)
-├── webstack.d/                           # Core modules (no framework logic)
+├── dcx                              # Minimal entry point (~100 lines)
+├── dcx.d/                           # Core modules (no framework logic)
 │   ├── 00-core.sh                        # Docker Compose orchestration
 │   ├── 10-utils.sh                       # Logging, binary resolution
 │   ├── 20-env.sh                         # Core environment only
@@ -155,7 +165,7 @@ bin/
 **Alternatives Considered:**
 1. **Monolithic compose files**: Hard to maintain, can't cherry-pick services
 2. **Framework logic in core**: Defeats the purpose, creates coupling
-3. **Plugin discovery from ~/.webstack/**: Too complex, prefer explicit structure
+3. **Plugin discovery from ~/.dcx/**: Too complex, prefer explicit structure
 
 ### Decision 2: Compose File Loading Strategy
 
@@ -182,8 +192,8 @@ elif [[ "${DC_DATABASE_SCHEMA}" == "mysql" ]]; then
 fi
 
 # Plugin services (loaded by plugins)
-if [[ -n "${WEBSTACK_PLUGIN}" ]]; then
-  plugin_compose_dir="plugins/${WEBSTACK_PLUGIN}/compose"
+if [[ -n "${DCX_PLUGIN}" ]]; then
+  plugin_compose_dir="plugins/${DCX_PLUGIN}/compose"
   if [[ -d "${plugin_compose_dir}" ]]; then
     for compose_file in "${plugin_compose_dir}"/*.yml; do
       COMPOSE_FILES+=("${compose_file}")
@@ -269,7 +279,7 @@ for plugin_dir in plugins/*/; do
   if [[ -f "${plugin_file}" ]]; then
     source "${plugin_file}"
     if plugin_detect; then
-      WEBSTACK_PLUGIN=$(plugin_name)
+      DCX_PLUGIN=$(plugin_name)
       plugin_init
       break
     fi
@@ -277,7 +287,7 @@ for plugin_dir in plugins/*/; do
 done
 
 # Or explicit plugin selection
-export WEBSTACK_PLUGIN=oro  # Force Oro plugin
+export DCX_PLUGIN=oro  # Force Oro plugin
 ```
 
 **Rationale:**
@@ -296,7 +306,7 @@ export WEBSTACK_PLUGIN=oro  # Force Oro plugin
 
 **Strategy: Minimal core variables + plugin-managed framework variables**
 
-**Core variables (managed by webstack core):**
+**Core variables (managed by dcx core):**
 ```bash
 # Project configuration
 DC_PROJECT_NAME=${DC_PROJECT_NAME:-$(basename $(pwd))}
@@ -322,7 +332,7 @@ DC_MQ_USER=${DC_MQ_USER:-app}
 DC_MQ_PASSWORD=${DC_MQ_PASSWORD:-app}
 
 # Paths
-DC_CONFIG_DIR=${DC_CONFIG_DIR:-$HOME/.webstack/${DC_PROJECT_NAME}}
+DC_CONFIG_DIR=${DC_CONFIG_DIR:-$HOME/.dcx/${DC_PROJECT_NAME}}
 DC_APP_DIR=${DC_APP_DIR:-/var/www}
 
 # Ports
@@ -379,19 +389,19 @@ export ORO_SECRET=${ORO_SECRET:-ThisTokenIsNotSoSecretChangeIt}
 ### Decision 5: Command Naming
 
 **Strategy: Single clean command name**
-- **Command**: `webstack` (framework-agnostic, universal)
+- **Command**: `dcx` (framework-agnostic, universal)
 - **No aliases**: Clean break from old naming
 - **Framework detection**: Automatic based on project context
 
 ```bash
-# webstack automatically detects and adapts to framework
-cd ~/orocommerce && webstack up    # Auto-detects Oro, uses Oro adapter
-cd ~/magento && webstack up        # Auto-detects Magento, uses Magento adapter  
-cd ~/symfony && webstack up        # Auto-detects Symfony, uses generic adapter
+# dcx automatically detects and adapts to framework
+cd ~/orocommerce && dcx up    # Auto-detects Oro, uses Oro adapter
+cd ~/magento && dcx up        # Auto-detects Magento, uses Magento adapter  
+cd ~/symfony && dcx up        # Auto-detects Symfony, uses generic adapter
 
 # Explicit framework override when needed
-DC_FRAMEWORK=oro webstack up       # Force Oro adapter
-DC_FRAMEWORK=magento webstack up   # Force Magento adapter
+DC_FRAMEWORK=oro dcx up       # Force Oro adapter
+DC_FRAMEWORK=magento dcx up   # Force Magento adapter
 ```
 
 **Rationale:**
@@ -403,7 +413,7 @@ DC_FRAMEWORK=magento webstack up   # Force Magento adapter
 
 **Alternatives Considered:**
 1. **Keep orodc name**: Misleading and limits adoption for non-Oro users
-2. **Require framework in command**: Too verbose (webstack-oro, webstack-magento)
+2. **Require framework in command**: Too verbose (dcx-oro, dcx-magento)
 3. **Multiple binaries**: Installation complexity, user confusion
 4. **Generic name like "devstack"**: Already taken by OpenStack project
 
@@ -433,7 +443,7 @@ DC_FRAMEWORK=magento webstack up   # Force Magento adapter
 ### v1.0.0: Clean Break Release
 
 **Release Strategy:**
-- Brand new tool: WebStack v1.0
+- Brand new tool: **dcx** v1.0 (Docker Compose eXtended)
 - Old tool continues as OroDC v0.x (maintenance mode)
 - Both available via different Homebrew formulas
 
@@ -448,9 +458,11 @@ DC_FRAMEWORK=magento webstack up   # Force Magento adapter
 ```bash
 # Old version (maintenance mode, Oro-only)
 brew install digitalspacestdio/tap/docker-compose-oroplatform
+orodc up -d
 
-# New version (v1.0, all frameworks)
-brew install digitalspacestdio/tap/webstack
+# New version (v1.0, universal, 3 chars!)
+brew install digitalspacestdio/tap/dcx
+dcx up -d
 ```
 
 **User Migration Path:**
@@ -459,7 +471,7 @@ brew install digitalspacestdio/tap/webstack
 - **Side-by-side installation**: Both tools can coexist
 - **Different config directories**: 
   - Old: `~/.orodc/`
-  - New: `~/.webstack/`
+  - New: `~/.dcx/`
 
 **Legacy OroDC Maintenance:**
 - Critical bug fixes only
@@ -483,24 +495,28 @@ brew install digitalspacestdio/tap/webstack
 2. **Plugin Distribution**: How should third-party framework adapters be distributed?
    - **Proposal**: Start with official adapters only, add plugin marketplace in v2.0
 
-3. **Configuration File**: Should we introduce a .webstackrc or .webstack.yml configuration file?
+3. **Configuration File**: Should we introduce a .dcxrc or .dcx.yml configuration file?
    - **Proposal**: Environment variables sufficient for v1.0, consider config file for v1.1
 
 4. **Multi-Framework Projects**: How to handle projects using multiple frameworks (e.g., Symfony + Laravel)?
    - **Proposal**: Explicit DC_FRAMEWORK variable required, document common patterns
 
-5. **Docker Image Strategy**: Should we rebrand images from "orodc-*" to "webstack-*"?
+5. **Docker Image Strategy**: Should we rebrand images from "orodc-*" to "dcx-*"?
    - **Proposal**: 
-     - New images: `ghcr.io/digitalspacestdio/webstack-php:8.4-node22`
-     - Framework-specific: `ghcr.io/digitalspacestdio/webstack-oro:8.4-node22`
+     - New images: `ghcr.io/digitalspacestdio/dcx-php:8.4-node22`
+     - Framework-specific: `ghcr.io/digitalspacestdio/dcx-oro:8.4-node22`
      - Old images remain for legacy OroDC v0.x
 
 6. **Testing Strategy**: How to test all framework adapters without slowing CI/CD?
    - **Proposal**: Matrix strategy with parallel jobs per framework adapter
 
-7. **Project Naming**: Final decision on tool name?
-   - **Options**: webstack, phpstack, devstack (taken), dockerstack
-   - **Proposal**: "WebStack" - professional, clear, available
+7. **Project Naming**: ✅ **DECIDED: dcx**
+   - **DC** = Docker Compose (clear identity)
+   - **X** = eXtended/eXtensible (universal)
+   - **3 chars** = minimal typing
+   - **Not dev-specific** = can be used in production
+   - **Not language-specific** = works with any stack
+   - **Available** = free on GitHub, Homebrew, npm, etc.
 
 8. **Framework Adapter API Stability**: Should we freeze adapter API in v1.0?
    - **Proposal**: Mark adapter API as "stable" in v1.0, use semantic versioning for changes

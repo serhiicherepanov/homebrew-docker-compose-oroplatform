@@ -52,7 +52,7 @@ The core system SHALL manage project-specific configuration directories for stor
 
 #### Scenario: Default configuration directory location
 - **WHEN** DC_CONFIG_DIR is not set
-- **THEN** it SHALL use $HOME/.webstack/${PROJECT_NAME} as default
+- **THEN** it SHALL use $HOME/.dcx/${PROJECT_NAME} as default
 - **AND** it SHALL create the directory if it doesn't exist
 
 #### Scenario: Custom configuration directory location
@@ -127,7 +127,7 @@ The core system SHALL work correctly on Linux, macOS Intel, and macOS Apple Sili
 - **WHEN** searching for compose files
 - **THEN** it SHALL try paths in order:
   1. ${BREW_PREFIX}/Homebrew/Library/Taps/.../compose (development)
-  2. ${BREW_PREFIX}/share/webstack/compose (installed)
+  2. ${BREW_PREFIX}/share/dcx/compose (installed)
   3. ${SCRIPT_DIR}/../compose (relative fallback)
 - **AND** it SHALL use the first path that exists
 

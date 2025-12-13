@@ -55,6 +55,7 @@ This is a **clean break redesign** - we're building DCX (Docker Compose eXtended
 
 ### Affected Specs
 - **NEW** `core-system` - Core Docker Compose orchestration and environment management
+- **NEW** `argument-parsing` - Smart argument parsing and transparent binary redirection (CRITICAL)
 - **NEW** `pipeline-management` - Command routing and execution flow
 - **NEW** `infrastructure-modules` - Reusable infrastructure components (DB, webserver, MQ, etc.)
 - **NEW** `framework-adapters` - Plugin system for framework-specific functionality
@@ -106,4 +107,36 @@ This is a **clean break redesign** - we're building DCX (Docker Compose eXtended
 - **Language agnostic** = works with PHP, Ruby, Node.js, any stack
 - **No "dev" limitation** = can be used for production deployments
 - **Future proof** = can add rolling updates, scaling, orchestration features
+
+### Critical UX Features (Must Preserve from OroDC)
+
+**1. Smart Argument Parsing**
+```bash
+# Complex command with Docker Compose + container flags:
+dcx --profile=test run --rm cli php bin/console cache:clear --env=prod
+
+# System intelligently separates:
+# - Docker Compose flags (left): --profile=test
+# - Docker Compose command: run --rm
+# - Container command (right): php bin/console cache:clear --env=prod
+```
+
+**2. Transparent Binary Redirection**
+```bash
+# dcx can act as any binary (PHP, node, python, etc.):
+dcx --version              # → php --version in container
+dcx bin/console cache:clear # → php bin/console cache:clear in container
+dcx script.php             # → php script.php in container
+
+# Can even symlink:
+ln -s /usr/local/bin/dcx /usr/local/bin/php
+php --version              # Works as PHP! 
+
+# Configurable per project:
+export DC_DEFAULT_BINARY=php    # For PHP/Symfony projects
+export DC_DEFAULT_BINARY=node   # For Node.js projects
+export DC_DEFAULT_BINARY=python # For Python projects
+```
+
+These features are NOT optional - they're core to why OroDC is so convenient to use.
 

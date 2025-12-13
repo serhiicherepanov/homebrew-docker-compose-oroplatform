@@ -838,14 +838,61 @@ Export:
   - Clean problematic SQL (DEFINER, etc.)
 ```
 
-**6. Container Execution**
+**6. Smart Argument Parsing & Command Routing**
+```
+Critical Feature: Intelligent argument parsing
+
+Problem:
+  dcx --profile=test run --rm cli php bin/console cache:clear --env=prod
+  
+  Which flags go where?
+  - --profile=test → docker compose (left)
+  - run --rm → docker compose command
+  - cli → service name
+  - php bin/console cache:clear --env=prod → command in container (right)
+
+Solution: Parse into buckets
+  left_flags: [--profile=test]
+  left_options: []
+  command: run
+  args: [--rm, cli, php, bin/console, cache:clear]
+  right_flags: [--env=prod]
+  right_options: []
+
+Build:
+  docker compose --profile=test run --rm cli php bin/console cache:clear --env=prod
+```
+
+**7. Transparent Command Redirection**
+```
+Current OroDC feature (must preserve):
+  
+  # orodc without args = PHP binary
+  ln -s /path/to/orodc /usr/local/bin/php
+  php --version              # Works!
+  php bin/console cache:clear # Works!
+
+How it works:
+  1. Detect if called as different name (php, node, etc.)
+  2. OR detect PHP-specific flags (-v, --version, -r)
+  3. OR detect .php file as first arg
+  4. Redirect to appropriate container + binary
+
+Must be configurable per project:
+  - Oro/Symfony: php binary (default)
+  - Node.js projects: node binary
+  - Make-based: make
+  - Python: python
+  - Ruby: ruby
+```
+
+**8. Container Execution**
 ```
 Command types:
   - docker compose run (one-off)
   - docker compose exec (running container)
   - SSH into container
-  - Execute PHP commands
-  - Execute database CLIs
+  - Execute commands via transparent redirection
 
 Must handle:
   - TTY allocation
@@ -853,6 +900,7 @@ Must handle:
   - Environment variables
   - Working directory
   - User/permissions
+  - Argument preservation (quoting, spacing)
 ```
 
 ---
@@ -1088,6 +1136,220 @@ Optimization:
 ---
 
 ## Decisions
+
+### Decision 0: Smart Argument Parsing (Critical Feature)
+
+**Current OroDC Magic - Must Preserve:**
+
+OroDC has intelligent argument parsing that makes it incredibly convenient to use. This is NOT optional - it's core to the user experience.
+
+**Example 1: Transparent PHP execution**
+```bash
+# Current behavior (must keep):
+orodc --version              # → php --version in container
+orodc -r "phpinfo();"        # → php -r "phpinfo();" in container
+orodc bin/console cache:clear  # → php bin/console cache:clear in container
+
+# Can even symlink:
+ln -s /path/to/orodc /usr/local/bin/php
+php --version                # Works as PHP!
+```
+
+**Example 2: Complex Docker Compose + container arguments**
+```bash
+# User types:
+dcx --profile=test run --rm cli php bin/console cache:clear --env=prod
+
+# System must understand:
+docker compose \
+  --profile=test \          # ← Docker Compose flag (left)
+  run --rm \                # ← Docker Compose command + flag
+  cli \                     # ← Service name
+  php bin/console cache:clear --env=prod  # ← Container command (right)
+
+# Parsing result:
+left_flags: [--profile=test]
+command: run
+right_flags: [--rm]
+service: cli
+container_cmd: [php, bin/console, cache:clear, --env=prod]
+```
+
+**Implementation Strategy (Bash):**
+
+```bash
+# Function: parse_arguments
+parse_arguments() {
+    local -a left_flags=()
+    local -a left_options=()
+    local -a right_flags=()
+    local -a right_options=()
+    local -a args=()
+    local command=""
+    local in_command=false
+    
+    # State machine: before command → command → after command
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --*=*)  # Long option with value (--profile=test)
+                if [[ "$in_command" == false ]]; then
+                    left_flags+=("$1")
+                else
+                    right_flags+=("$1")
+                fi
+                shift
+                ;;
+            --*)    # Long option
+                if [[ "$in_command" == false ]]; then
+                    left_flags+=("$1")
+                    # Check if next arg is value
+                    if [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^- ]]; then
+                        left_options+=("$1" "$2")
+                        shift
+                    fi
+                else
+                    right_flags+=("$1")
+                fi
+                shift
+                ;;
+            -*)     # Short option
+                if [[ "$in_command" == false ]]; then
+                    left_flags+=("$1")
+                else
+                    right_flags+=("$1")
+                fi
+                shift
+                ;;
+            *)      # Non-option argument
+                if [[ -z "$command" ]] && is_compose_command "$1"; then
+                    command="$1"
+                    in_command=true
+                else
+                    args+=("$1")
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    # Export for use in other functions
+    export PARSED_LEFT_FLAGS="${left_flags[@]}"
+    export PARSED_COMMAND="$command"
+    export PARSED_ARGS="${args[@]}"
+    export PARSED_RIGHT_FLAGS="${right_flags[@]}"
+}
+
+# Function: is_compose_command
+is_compose_command() {
+    local cmd="$1"
+    case "$cmd" in
+        up|down|start|stop|restart|ps|logs|exec|run|build|pull|push|config|version|ls)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+```
+
+**Transparent Redirection (Bash):**
+
+```bash
+# Function: detect_transparent_redirect
+detect_transparent_redirect() {
+    local binary_name
+    binary_name=$(basename "$0")
+    
+    # Method 1: Called as different binary (symlink)
+    if [[ "$binary_name" != "dcx" ]]; then
+        case "$binary_name" in
+            php)   REDIRECT_TO="php" ;;
+            node)  REDIRECT_TO="node" ;;
+            python) REDIRECT_TO="python" ;;
+            ruby)  REDIRECT_TO="ruby" ;;
+        esac
+        return 0
+    fi
+    
+    # Method 2: Detect by first argument
+    local first_arg="${1:-}"
+    
+    # PHP flags
+    if [[ "$first_arg" =~ ^(-v|--version|-r|-l|-m|-i|--ini)$ ]]; then
+        REDIRECT_TO="${DC_DEFAULT_BINARY:-php}"
+        return 0
+    fi
+    
+    # PHP file
+    if [[ "$first_arg" =~ \.php$ ]]; then
+        REDIRECT_TO="${DC_DEFAULT_BINARY:-php}"
+        return 0
+    fi
+    
+    # Symfony console
+    if [[ "$first_arg" == "bin/console" ]] || [[ "$first_arg" =~ ^(cache:|oro:|doctrine:) ]]; then
+        REDIRECT_TO="${DC_DEFAULT_BINARY:-php}"
+        return 0
+    fi
+    
+    # Node files
+    if [[ "$first_arg" =~ \.(js|mjs|cjs)$ ]]; then
+        REDIRECT_TO="${DC_DEFAULT_BINARY:-node}"
+        return 0
+    fi
+    
+    # Python files
+    if [[ "$first_arg" =~ \.py$ ]]; then
+        REDIRECT_TO="${DC_DEFAULT_BINARY:-python}"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function: execute_with_redirect
+execute_with_redirect() {
+    local redirect_binary="$1"
+    shift  # Remove binary from args
+    
+    if [[ "$DEBUG" ]]; then
+        echo "[DEBUG] Transparent redirect: $redirect_binary $*" >&2
+    fi
+    
+    # Check if container is running
+    if is_container_running "cli"; then
+        # Use exec (fast)
+        exec docker compose exec cli "$redirect_binary" "$@"
+    else
+        # Use run (slower but works)
+        exec docker compose run --rm cli "$redirect_binary" "$@"
+    fi
+}
+```
+
+**Configuration per Project:**
+
+```bash
+# .env.dcx
+DC_DEFAULT_BINARY=php        # Default for PHP/Symfony projects
+# DC_DEFAULT_BINARY=node     # For Node.js projects
+# DC_DEFAULT_BINARY=python   # For Python projects
+# DC_DEFAULT_BINARY=none     # Disable transparent redirect
+
+# Plugin can set default
+# plugins/oro/env.sh:
+export DC_DEFAULT_BINARY="${DC_DEFAULT_BINARY:-php}"
+```
+
+**Why This is Critical:**
+
+1. **User Experience**: `dcx bin/console cache:clear` is much better than `dcx run cli php bin/console cache:clear`
+2. **Drop-in Replacement**: Can symlink as `php` for seamless integration
+3. **Framework Flexibility**: Works with PHP, Node.js, Python, Ruby, anything
+4. **Power User Features**: Complex Docker Compose flags just work
+
+---
 
 ### Decision 1: Module Organization - Minimalist Core + Plugins
 

@@ -57,13 +57,93 @@
 - [ ] 4.5 Add environment validation functions
 - [ ] 4.6 Add environment resolution tests
 
-## 5. Pipeline Module
-- [ ] 5.1 Create bin/dcx.d/30-pipeline.sh
-- [ ] 5.2 Extract argument parsing logic
-- [ ] 5.3 Implement command routing system
-- [ ] 5.4 Add command detection functions
-- [ ] 5.5 Create pipeline execution framework
-- [ ] 5.6 Write pipeline integration tests
+## 5. Smart Argument Parsing (CRITICAL - Core UX Feature)
+- [ ] 5.1 Create bin/dcx.d/30-argument-parser.sh
+  - Parse Docker Compose flags (left vs right)
+  - Detect command boundary
+  - Organize into buckets (left_flags, command, args, right_flags)
+  - Handle --option=value and --option value forms
+  - Preserve argument quoting and special chars
+- [ ] 5.2 Implement is_compose_command() detection
+  - Recognize all Docker Compose native commands
+  - up, down, start, stop, restart
+  - ps, logs, exec, run, build, pull, push
+  - config, version, ls, etc.
+- [ ] 5.3 Add argument preservation
+  - Proper bash array handling: "${args[@]}"
+  - Quote preservation
+  - Special character escaping
+  - Space handling in arguments
+- [ ] 5.4 Write comprehensive tests for argument parsing
+  - Test: dcx --profile=test up -d
+  - Test: dcx --profile=test run --rm cli php bin/console cache:clear --env=prod
+  - Test: Arguments with spaces and quotes
+  - Test: Special characters ($, `, !, etc.)
+- [ ] 5.5 Add DEBUG mode output
+  - Show parsed buckets
+  - Show final command
+  - Help troubleshoot argument issues
+- [ ] 5.6 Performance optimize
+  - Skip parsing for simple commands
+  - Fast path for common cases
+  - Maintain <100ms startup target
+
+## 6. Transparent Binary Redirection (CRITICAL - Core UX Feature)
+- [ ] 6.1 Create bin/dcx.d/35-redirect.sh
+  - Detect calling name (symlink support)
+  - Detect PHP flags (-v, --version, -r, etc.)
+  - Detect file extensions (.php, .js, .py)
+  - Detect framework patterns (bin/console, cache:*, oro:*)
+- [ ] 6.2 Implement detect_transparent_redirect()
+  - Check if called as symlink (php, node, python)
+  - Check first argument for indicators
+  - Return detected binary or false
+- [ ] 6.3 Implement execute_with_redirect()
+  - Check if container running (exec vs run)
+  - Execute with proper binary
+  - Pass all arguments through
+  - Preserve stdin/stdout/stderr
+- [ ] 6.4 Add DC_DEFAULT_BINARY configuration
+  - Environment variable support
+  - Plugin can set default
+  - Values: php, node, python, ruby, make, none
+  - Document per-project configuration
+- [ ] 6.5 Test symlink functionality
+  - ln -s dcx php
+  - Test php --version
+  - Test php bin/console
+  - Test php script.php
+- [ ] 6.6 Test transparent detection
+  - dcx -v (PHP version)
+  - dcx bin/console cache:clear
+  - dcx script.php args
+  - dcx node app.js (if DC_DEFAULT_BINARY=node)
+- [ ] 6.7 Document transparent redirection
+  - How it works
+  - Configuration options
+  - Framework-specific behavior
+  - Troubleshooting
+
+## 7. Pipeline & Command Routing
+- [ ] 7.1 Create bin/dcx.d/40-pipeline.sh
+  - Integrate argument parser
+  - Integrate transparent redirect
+  - Command routing logic
+  - Error handling
+- [ ] 7.2 Implement command dispatcher
+  - Route Docker Compose commands
+  - Route plugin commands
+  - Route transparent redirects
+  - Route core commands (ssh, cli, bash)
+- [ ] 7.3 Add command execution wrapper
+  - Build final docker compose command
+  - Execute with proper flags
+  - Stream output
+  - Capture exit code
+- [ ] 7.4 Write integration tests
+  - Test full command flow
+  - Test all routing paths
+  - Test error scenarios
 
 ## 6. Compose Management Module
 - [ ] 6.1 Create bin/dcx.d/40-compose.sh
@@ -74,8 +154,8 @@
 - [ ] 6.6 Add Docker network management
 - [ ] 6.7 Test compose file merging logic
 
-## 7. Core CLI Commands (Framework-Agnostic)
-- [ ] 7.1 Create bin/dcx.d/30-cli.sh (generic CLI commands)
+## 8. Core CLI Commands (Framework-Agnostic)
+- [ ] 8.1 Create bin/dcx.d/50-cli.sh (generic CLI commands)
 - [ ] 7.2 Implement database commands:
   - dcx psql (PostgreSQL CLI)
   - dcx mysql (MySQL CLI)
@@ -97,7 +177,13 @@
 - [ ] 7.7 Test all CLI commands without plugins
 - [ ] 7.8 Document core CLI command usage
 
-## 8. Plugin System
+## 9. Database Operations Module
+- [ ] 9.1 Create bin/dcx.d/60-database.sh
+- [ ] 9.2 Implement database import (from tasks 8.4-8.5)
+- [ ] 9.3 Implement database export (from tasks 8.4-8.5)
+- [ ] 9.4-9.8 (keep existing database tasks)
+
+## 10. Plugin System
 - [ ] 8.1 Create bin/dcx.d/50-plugin-loader.sh
 - [ ] 8.2 Design plugin interface (plugin_detect, plugin_init, etc.)
 - [ ] 8.3 Implement plugin discovery mechanism

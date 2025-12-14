@@ -986,9 +986,9 @@ DC_ORO_PHP_DIST=alpine              # Base distribution (alpine)
 DC_ORO_NGINX_IMAGE=mynginx
 DC_ORO_NGINX_VERSION=latest
 
-# MailHog (email testing)
-DC_ORO_MAILHOG_IMAGE=mymailhog
-DC_ORO_MAILHOG_VERSION=latest
+# Mailpit (email testing)
+DC_ORO_MAILPIT_IMAGE=axllent/mailpit
+DC_ORO_MAILPIT_VERSION=latest
 
 # XHGui (profiling interface)
 DC_ORO_XHGUI_IMAGE=myxhgui

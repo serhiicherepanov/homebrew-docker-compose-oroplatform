@@ -40,7 +40,7 @@ The tool is distributed as a Homebrew formula and manages multi-container Docker
 - **Search**: `elasticsearch:8.10.3`
 - **Queue**: `oroinc/rabbitmq:3.9-1-management-alpine`
 - **Web Server**: `nginx:latest`
-- **Mail**: `cd2team/mailhog` (testing)
+- **Mail**: `axllent/mailpit` (testing)
 - **Profiling**: `xhgui/xhgui` + `mongo:4.4`
 
 **Build Strategy**: All custom images are built in GitHub Actions and published to GitHub Container Registry. No local builds required.
@@ -477,7 +477,7 @@ When user says "я смерджил" (I merged) or "merged":
 - **Elasticsearch**: `elasticsearch:8.10.3`
 - **RabbitMQ**: `rabbitmq:3.9-management-alpine`
 - **Nginx**: `nginx:latest`
-- **MailHog**: `mailhog/mailhog:latest`
+- **Mailpit**: `axllent/mailpit:latest`
 - **XHGui**: `perftools/xhgui:0.18.4`
 - **MongoDB**: `mongo:4.4`
 

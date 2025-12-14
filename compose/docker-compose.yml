@@ -346,11 +346,12 @@ services:
         max-size: "10m"
 
   mail:
-    image: "cd2team/mailhog"
+    image: "axllent/mailpit:latest"
     container_name: ${DC_ORO_NAME:-unnamed}_mail
     hostname: mail.${DC_ORO_NAME:-unnamed}.docker.local
     ports:
       - "${DC_ORO_MAIL_BIND_HOST:-127.0.0.1}:${DC_ORO_PORT_MAIL_WEBGUI:-8025}:8025"
+      - "${DC_ORO_MAIL_BIND_HOST:-127.0.0.1}:${DC_ORO_PORT_MAIL_SMTP:-1025}:1025"
     restart: always
     networks:
       - default
@@ -372,12 +373,16 @@ services:
       - "traefik.http.middlewares.${DC_ORO_NAME:-unnamed}-mail-stripprefix.stripprefix.prefixes=/mailbox"
       - "traefik.http.services.${DC_ORO_NAME:-unnamed}-mail.loadbalancer.server.port=8025"
       - "traefik.http.services.${DC_ORO_NAME:-unnamed}-mail.loadbalancer.server.scheme=http"
+    environment:
+      MP_SMTP_BIND_ADDR: "0.0.0.0:1025"
+      MP_UI_BIND_ADDR: "0.0.0.0:8025"
+      MP_WEBROOT: "/mailbox"
     deploy:
       resources:
         limits:
           memory: 256M
     healthcheck:
-      test: "nc -vz -w 1 localhost 8025"
+      test: "nc -vz -w 1 localhost 8025 && nc -vz -w 1 localhost 1025"
       start_period: 5s
       interval: 5s
       retries: 18

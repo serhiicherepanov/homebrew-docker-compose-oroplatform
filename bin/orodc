@@ -1626,7 +1626,7 @@ if [[ "$first_non_flag_arg" == "up" ]]; then
   
   
   printf "\033[0;37m[${DC_ORO_NAME}] Application: http://localhost:${DC_ORO_PORT_NGINX}\033[0m\n"
-  printf "\033[0;37m[${DC_ORO_NAME}] Mailhog: http://localhost:${DC_ORO_PORT_MAIL_WEBGUI}\033[0m\n"
+  printf "\033[0;37m[${DC_ORO_NAME}] Mailpit: http://localhost:${DC_ORO_PORT_MAIL_WEBGUI}\033[0m\n"
   printf "\033[0;37m[${DC_ORO_NAME}] Elasticsearch: http://localhost:${DC_ORO_PORT_SEARCH}\033[0m\n"
   printf "\033[0;37m[${DC_ORO_NAME}] Mq: http://localhost:${DC_ORO_PORT_MQ}\033[0m\n"
   

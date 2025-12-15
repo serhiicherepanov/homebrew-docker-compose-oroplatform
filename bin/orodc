@@ -82,10 +82,21 @@ show_spinner() {
 
 # Execute command with spinner and log on error
 # Usage: run_with_spinner "message" "command"
+# Spinner is disabled if DEBUG=1 or VERBOSE=1 is set, or if command contains --verbose/-v flags
+# Logs are written to /tmp and preserved on error for user inspection
 run_with_spinner() {
   local message=$1
   shift
   local cmd="$*"
+  
+  # If DEBUG or VERBOSE mode is enabled, or command contains verbose flags, run directly without spinner
+  if [[ -n "${DEBUG:-}" ]] || [[ -n "${VERBOSE:-}" ]] || [[ "$cmd" =~ (--verbose|-v[[:space:]]) ]]; then
+    msg_info "$message..."
+    eval "$cmd"
+    return $?
+  fi
+  
+  # Run with spinner
   local log_file
   log_file=$(mktemp /tmp/orodc-output.XXXXXX)
   local exit_code=0
@@ -100,11 +111,28 @@ run_with_spinner() {
   if [[ $exit_code -ne 0 ]]; then
     msg_error "Command failed"
     echo "" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
+    
+    # Show last 20 lines of the log
+    local line_count=$(wc -l < "$log_file")
+    if [[ $line_count -gt 20 ]]; then
+      msg_info "Last 20 lines of output:"
+      echo "" >&2
+      tail -n 20 "$log_file" >&2
+      echo "" >&2
+      msg_info "Full log available at: $log_file"
+      msg_info "View with: cat $log_file"
+    else
+      # If log is 20 lines or less, show everything
+      cat "$log_file" >&2
+      echo "" >&2
+      msg_info "Full log saved at: $log_file"
+    fi
+    
+    # Keep log file for user inspection
     return $exit_code
   fi
   
+  # Remove log file on success
   rm -f "$log_file"
   msg_ok "$message completed"
   return 0
@@ -856,8 +884,8 @@ if [[ "$temp_first_non_flag_arg" == "proxy" ]]; then
       # Pass all remaining arguments to docker compose up
       proxy_cmd="${DOCKER_COMPOSE_BIN} -p proxy -f \"$PROXY_COMPOSE_FILE\" up $*"
       
-      # Use spinner for detached mode unless DEBUG is enabled
-      if [[ "$*" == *"-d"* ]] && [[ -z "${DEBUG:-}" ]]; then
+      # Use spinner for detached mode
+      if [[ "$*" == *"-d"* ]]; then
         run_with_spinner "Starting proxy services" "$proxy_cmd" || {
           msg_error "Failed to start proxy services"
           exit 1
@@ -875,7 +903,7 @@ if [[ "$temp_first_non_flag_arg" == "proxy" ]]; then
         msg_info "  orodc proxy install-certs"
         msg_info ""
       else
-        # Foreground mode or DEBUG mode - show full output
+        # Foreground mode - show full output
         ${DOCKER_COMPOSE_BIN} -p proxy -f "$PROXY_COMPOSE_FILE" up "$@" || {
           msg_error "Failed to start proxy services"
           exit 1
@@ -888,38 +916,20 @@ if [[ "$temp_first_non_flag_arg" == "proxy" ]]; then
     down)
       proxy_down_cmd="${DOCKER_COMPOSE_BIN} -p proxy -f \"$PROXY_COMPOSE_FILE\" down $*"
       
-      # Use spinner unless DEBUG is enabled
-      if [[ -z "${DEBUG:-}" ]]; then
-        run_with_spinner "Stopping proxy services" "$proxy_down_cmd" || {
-          msg_error "Failed to stop proxy services"
-          exit 1
-        }
-      else
-        ${DOCKER_COMPOSE_BIN} -p proxy -f "$PROXY_COMPOSE_FILE" down "$@" || {
-          msg_error "Failed to stop proxy services"
-          exit 1
-        }
-        msg_ok "Proxy services stopped"
-      fi
+      run_with_spinner "Stopping proxy services" "$proxy_down_cmd" || {
+        msg_error "Failed to stop proxy services"
+        exit 1
+      }
       exit 0
       ;;
     
     purge)
       proxy_purge_cmd="${DOCKER_COMPOSE_BIN} -p proxy -f \"$PROXY_COMPOSE_FILE\" down -v $*"
       
-      # Use spinner unless DEBUG is enabled
-      if [[ -z "${DEBUG:-}" ]]; then
-        run_with_spinner "Removing proxy services and volumes" "$proxy_purge_cmd" || {
-          msg_error "Failed to remove proxy services"
-          exit 1
-        }
-      else
-        ${DOCKER_COMPOSE_BIN} -p proxy -f "$PROXY_COMPOSE_FILE" down -v "$@" || {
-          msg_error "Failed to remove proxy services"
-          exit 1
-        }
-        msg_ok "Proxy services removed (including volumes)"
-      fi
+      run_with_spinner "Removing proxy services and volumes" "$proxy_purge_cmd" || {
+        msg_error "Failed to remove proxy services"
+        exit 1
+      }
       exit 0
       ;;
     
@@ -2085,7 +2095,10 @@ fi
 
 if [ $# -eq 0 ] || [ "${args[0]}" = "ssh" ]; then
   SSH_HOST=${DC_ORO_SSH_BIND_HOST:-127.0.0.1}
-  SSH_PORT=$(${DOCKER_BIN} inspect "$(${DOCKER_COMPOSE_BIN_CMD} ps | grep ssh | awk '{ print $1 }')" | jq -r '.[0].NetworkSettings.Ports["22/tcp"][0].HostPort')
+  
+  # Get SSH port with spinner
+  get_port_cmd="${DOCKER_BIN} inspect \"\$(${DOCKER_COMPOSE_BIN_CMD} ps | grep ssh | awk '{ print \$1 }')\" | jq -r '.[0].NetworkSettings.Ports[\"22/tcp\"][0].HostPort'"
+  SSH_PORT=$(run_with_spinner "Connecting to SSH service" "$get_port_cmd" 2>&1 | tail -n1) || exit $?
 
   set -x
   exec ssh \
@@ -2223,15 +2236,27 @@ if echo ${args[0]} | grep -i '^install' | grep -i 'without' | grep -i 'demo' > /
   msg_info "Starting OroPlatform installation without demo data..."
   export XDEBUG_MODE=off
   ${DOCKER_COMPOSE_RUN_CMD} cli bash -c "[[ -d ${DC_ORO_APPDIR}/var/cache ]] && rm -rf ${DC_ORO_APPDIR}/var/cache/* || true"
-  ${DOCKER_COMPOSE_RUN_CMD} cli bash -c "composer install"
-  ${DOCKER_COMPOSE_RUN_CMD} cli bash -c "php bin/console --env=prod --timeout=1800 oro:install --language=en --formatting-code=en_US --organization-name='Acme Inc.' --user-name=admin --user-email=admin@example.com --user-firstname=John --user-lastname=Doe --user-password='\$ecretPassw0rd' --application-url='https://${DC_ORO_NAME:-unnamed}.docker.local/' --sample-data=n"
+  
+  # Run composer install with spinner
+  composer_cmd="${DOCKER_COMPOSE_RUN_CMD} cli bash -c \"composer install\""
+  run_with_spinner "Running composer install" "$composer_cmd" || exit $?
+  
+  # Run oro:install with spinner
+  install_cmd="${DOCKER_COMPOSE_RUN_CMD} cli bash -c \"php bin/console --env=prod --timeout=1800 oro:install --language=en --formatting-code=en_US --organization-name='Acme Inc.' --user-name=admin --user-email=admin@example.com --user-firstname=John --user-lastname=Doe --user-password='\\\$ecretPassw0rd' --application-url='https://${DC_ORO_NAME:-unnamed}.docker.local/' --sample-data=n\""
+  run_with_spinner "Installing OroPlatform without demo data" "$install_cmd" || exit $?
   exit 0
 elif echo ${args[0]} | grep -i '^install$' > /dev/null; then
   msg_info "Starting OroPlatform installation with sample data..."
   export XDEBUG_MODE=off
   ${DOCKER_COMPOSE_RUN_CMD} cli bash -c "[[ -d ${DC_ORO_APPDIR}/var/cache ]] && rm -rf ${DC_ORO_APPDIR}/var/cache/* || true"
-  ${DOCKER_COMPOSE_RUN_CMD} cli bash -c "composer install"
-  ${DOCKER_COMPOSE_RUN_CMD} cli bash -c "php bin/console --env=prod --timeout=1800 oro:install --language=en --formatting-code=en_US --organization-name='Acme Inc.' --user-name=admin --user-email=admin@example.com --user-firstname=John --user-lastname=Doe --user-password='\$ecretPassw0rd' --application-url='https://${DC_ORO_NAME:-unnamed}.docker.local/' --sample-data=y"
+  
+  # Run composer install with spinner
+  composer_cmd="${DOCKER_COMPOSE_RUN_CMD} cli bash -c \"composer install\""
+  run_with_spinner "Running composer install" "$composer_cmd" || exit $?
+  
+  # Run oro:install with spinner
+  install_cmd="${DOCKER_COMPOSE_RUN_CMD} cli bash -c \"php bin/console --env=prod --timeout=1800 oro:install --language=en --formatting-code=en_US --organization-name='Acme Inc.' --user-name=admin --user-email=admin@example.com --user-firstname=John --user-lastname=Doe --user-password='\\\$ecretPassw0rd' --application-url='https://${DC_ORO_NAME:-unnamed}.docker.local/' --sample-data=y\""
+  run_with_spinner "Installing OroPlatform with sample data" "$install_cmd" || exit $?
   exit 0
 fi
 
@@ -3133,12 +3158,8 @@ if [[ "$first_non_flag_arg" == "purge" ]]; then
     down_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[@]} ${left_options[@]} down -v"
   fi
   
-  # Use spinner for down command unless DEBUG mode is enabled
-  if [[ -z "${DEBUG:-}" ]]; then
-    run_with_spinner "Stopping and removing containers, volumes" "$down_cmd"
-  else
-    bash -c "$down_cmd"
-  fi
+  # Use spinner for down command
+  run_with_spinner "Stopping and removing containers, volumes" "$down_cmd"
 
   ${DOCKER_BIN} volume ls | awk '{ print $2 }' | tail +2 | grep '^'${DC_ORO_NAME}'_appcode$' > /dev/null && {
     msg_info "Removing appcode volume"
@@ -3175,13 +3196,7 @@ if [[ "$first_non_flag_arg" == "down" ]] && [[ -f "${DC_ORO_CONFIG_DIR}/compose.
   # Combine all arguments into a single string for proper execution
   full_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} ${args[*]} ${right_flags[*]} ${right_options[*]}"
   
-  # Use spinner for down command unless DEBUG mode is enabled or verbose flag is set
-  if [[ -z "${DEBUG:-}" ]] && [[ ! " ${left_flags[*]} ${right_flags[*]} " =~ " --verbose " ]] && [[ ! " ${left_flags[*]} ${right_flags[*]} " =~ " -v " ]]; then
-    run_with_spinner "Stopping services" "$full_cmd"
-    exit $?
-  fi
-  
-  bash -c "$full_cmd"
+  run_with_spinner "Stopping services" "$full_cmd"
   exit $?
 fi
 
@@ -3204,20 +3219,10 @@ if [[ "$is_docker_compose_cmd" == "true" ]]; then
       skip_build=true
     fi
     
-    # Use spinner for build and up unless DEBUG mode is enabled or verbose flag is set
-    use_spinner=true
-    if [[ -n "${DEBUG:-}" ]] || [[ " ${left_flags[*]} ${right_flags[*]} " =~ " --verbose " ]] || [[ " ${left_flags[*]} ${right_flags[*]} " =~ " -v " ]]; then
-      use_spinner=false
-    fi
-    
     # Phase 1: Build images (unless --no-build is specified)
     if [[ "$skip_build" == "false" ]]; then
       build_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} build ${docker_services}"
-      if [[ "$use_spinner" == "true" ]]; then
-        DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Building services" "$build_cmd" || exit $?
-      else
-        DC_ORO_NAME="$DC_ORO_NAME" bash -c "$build_cmd" || exit $?
-      fi
+      DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Building services" "$build_cmd" || exit $?
     fi
     
     # Phase 2: Start services (without --build flag)
@@ -3230,28 +3235,16 @@ if [[ "$is_docker_compose_cmd" == "true" ]]; then
     done
     
     up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up ${up_flags[*]} ${right_options[*]} ${docker_services}"
-    if [[ "$use_spinner" == "true" ]]; then
-      DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Starting services" "$up_cmd" || exit $?
-      show_service_urls
-      exit 0
-    else
-      DC_ORO_NAME="$DC_ORO_NAME" bash -c "$up_cmd" || exit $?
-      show_service_urls
-      exit 0
-    fi
+    DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Starting services" "$up_cmd" || exit $?
+    show_service_urls
+    exit 0
   fi
   
   # Handle 'build' command
   if [[ "$docker_cmd" == "build" ]]; then
     full_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} ${docker_cmd} ${right_flags[*]} ${right_options[*]} ${docker_services}"
-    
-    if [[ -z "${DEBUG:-}" ]] && [[ ! " ${left_flags[*]} ${right_flags[*]} " =~ " --verbose " ]] && [[ ! " ${left_flags[*]} ${right_flags[*]} " =~ " -v " ]]; then
-      DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Building services" "$full_cmd"
-      exit $?
-    else
-      DC_ORO_NAME="$DC_ORO_NAME" bash -c "$full_cmd"
-      exit $?
-    fi
+    DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Building services" "$full_cmd"
+    exit $?
   fi
   
   # Handle all other docker compose commands

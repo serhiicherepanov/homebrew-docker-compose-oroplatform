@@ -272,7 +272,7 @@ msg_header "4. Cache Configuration"
 
 # Determine if using custom cache image
 USE_CUSTOM_CACHE=false
-if [[ -n "$EXISTING_CACHE_IMAGE" ]] && [[ ! "$EXISTING_CACHE_IMAGE" =~ ^(redis:|eqalpha/keydb:) ]]; then
+if [[ -n "$EXISTING_CACHE_IMAGE" ]] && [[ ! "$EXISTING_CACHE_IMAGE" =~ ^(redis:|eqalpha/keydb:|valkey/valkey:) ]]; then
   USE_CUSTOM_CACHE=true
 fi
 
@@ -287,7 +287,7 @@ if prompt_yes_no "Use custom cache image?" "$([ "$USE_CUSTOM_CACHE" = true ] && 
   SELECTED_CACHE_VERSION="${EXISTING_CACHE_VERSION:-custom}"
 else
   # Select cache engine type based on existing or default
-  CACHE_TYPES=("Redis" "KeyDB")
+  CACHE_TYPES=("Redis" "Valkey" "KeyDB")
   DEFAULT_CACHE_TYPE="${EXISTING_CACHE_ENGINE:-Redis}"
   SELECTED_CACHE_TYPE=$(prompt_select "Select cache engine:" "$DEFAULT_CACHE_TYPE" "${CACHE_TYPES[@]}")
   
@@ -302,6 +302,16 @@ else
     fi
     SELECTED_CACHE_VERSION=$(prompt_select "Select Redis version:" "$DEFAULT_REDIS_VERSION" "${REDIS_VERSIONS[@]}")
     SELECTED_CACHE_IMAGE="redis:${SELECTED_CACHE_VERSION}-alpine"
+  elif [[ "$SELECTED_CACHE_TYPE" == "Valkey" ]]; then
+    VALKEY_VERSIONS=("9.0" "8.0" "7.2")
+    # Only use existing version if it's valid for Valkey and type hasn't changed
+    if [[ "$EXISTING_CACHE_ENGINE" == "Valkey" ]] && [[ " ${VALKEY_VERSIONS[*]} " =~ " ${EXISTING_CACHE_VERSION} " ]]; then
+      DEFAULT_VALKEY_VERSION="$EXISTING_CACHE_VERSION"
+    else
+      DEFAULT_VALKEY_VERSION="9.0"
+    fi
+    SELECTED_CACHE_VERSION=$(prompt_select "Select Valkey version:" "$DEFAULT_VALKEY_VERSION" "${VALKEY_VERSIONS[@]}")
+    SELECTED_CACHE_IMAGE="valkey/valkey:${SELECTED_CACHE_VERSION}-alpine"
   else
     KEYDB_VERSIONS=("6.3.4" "6.3.3")
     # Only use existing version if it's valid for KeyDB and type hasn't changed

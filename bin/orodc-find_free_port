@@ -157,23 +157,29 @@ find_free_ports_batch() {
     fi
     
     # Find free port for this service
+    # CRITICAL: Always start from DEFAULT_PORT (with prefix), not from SELECTED_PORT
+    # SELECTED_PORT from compose.yml is only used to check if it matches our default
     local port_found=""
-    if [[ -n "$SELECTED_PORT" ]]; then
-      # Check if the port from compose.yml is available or occupied by our project
+    
+    # First, check if SELECTED_PORT matches DEFAULT_PORT and is available
+    if [[ -n "$SELECTED_PORT" ]] && [[ "$SELECTED_PORT" == "$DEFAULT_PORT" ]]; then
       if ! is_port_used_batch "$SELECTED_PORT" "$PROJECT_NAME" "$SERVICE_NAME" "$USED_PORTS"; then
-        # Port is free or used by our project - use it
+        # Port matches default and is free - use it
         port_found="$SELECTED_PORT"
       else
-        # Port is occupied by another project - find a new one
+        # Port matches default but is occupied - find alternative starting from default
         local usage_info
         usage_info=$(get_port_usage_info "$SELECTED_PORT" "$PROJECT_NAME")
-        echo -e "\033[33m==> Warning: Port $SELECTED_PORT from compose.yml is occupied by $usage_info, searching for alternative\033[0m" >&2
+        echo -e "\033[33m==> Warning: Port $SELECTED_PORT (default) is occupied by $usage_info, searching for alternative\033[0m" >&2
       fi
+    elif [[ -n "$SELECTED_PORT" ]] && [[ "$SELECTED_PORT" != "$DEFAULT_PORT" ]]; then
+      # SELECTED_PORT exists but doesn't match default - warn and use default instead
+      echo -e "\033[33m==> Warning: Port $SELECTED_PORT in compose.yml doesn't match default $DEFAULT_PORT, using default\033[0m" >&2
     fi
     
     if [[ -z "$port_found" ]]; then
-      # Find a free port starting from default (or from compose port if it was occupied)
-      local PORT="${SELECTED_PORT:-$DEFAULT_PORT}"
+      # Find a free port starting from DEFAULT_PORT (always use default, not selected)
+      local PORT="$DEFAULT_PORT"
       while [[ "$PORT" -le 65535 ]]; do
         if ! is_port_used_batch "$PORT" "$PROJECT_NAME" "$SERVICE_NAME" "$USED_PORTS"; then
           port_found="$PORT"

@@ -20,7 +20,7 @@ fi
 # Ensure dependencies are started before running command
 # This prevents "Creating..." and "Starting..." messages from appearing during run
 # Use spinner to show progress while starting containers
-if ! run_with_spinner "Starting containers" "${DOCKER_COMPOSE_BIN_CMD} up -d --quiet-pull --quiet-build"; then
+if ! run_with_spinner "Starting containers" "${DOCKER_COMPOSE_BIN_CMD} up -d --remove-orphans --quiet-pull --quiet-build"; then
   # If startup failed, still try to run the command (containers might be partially started)
   true
 fi

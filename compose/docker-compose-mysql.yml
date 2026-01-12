@@ -38,6 +38,7 @@ services:
         max-size: "10m"
 
   database-cli:
+    profiles: ["run-only"]
     image: '${DC_ORO_MYSQL_IMAGE:-mysql:8.0-oracle}'
     container_name: ${DC_ORO_NAME:-unnamed}_database_cli
     hostname: database-cli.${DC_ORO_NAME:-unnamed}.docker.local

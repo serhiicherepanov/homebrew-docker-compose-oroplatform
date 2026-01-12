@@ -104,6 +104,7 @@ services:
         max-size: "10m"
 
   cli:
+    profiles: ["run-only"]
     container_name: "${DC_ORO_NAME:-unnamed}_cli_${DC_ORO_PHP_VERSION:-8.4}-${DC_ORO_NODE_VERSION:-22}-${DC_ORO_COMPOSER_VERSION:-2}"
     hostname: cli.${DC_ORO_NAME:-unnamed}.docker.local
     dns:

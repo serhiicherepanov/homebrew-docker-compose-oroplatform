@@ -115,7 +115,7 @@ handle_compose_up() {
       fi
     done
 
-    up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up ${up_flags[*]} ${right_options[*]} ${docker_services}"
+    up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up --remove-orphans ${up_flags[*]} ${right_options[*]} ${docker_services}"
     eval "$up_cmd" || exit $?
     show_service_urls
     exit 0
@@ -148,7 +148,7 @@ handle_compose_up() {
     up_flags+=("--wait")
   fi
 
-  up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up ${up_flags[*]} ${right_options[*]} ${docker_services}"
+  up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up --remove-orphans ${up_flags[*]} ${right_options[*]} ${docker_services}"
   run_with_spinner "Starting services" "$up_cmd" || exit $?
 
   # Calculate total up time and save

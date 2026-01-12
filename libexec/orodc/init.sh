@@ -252,12 +252,12 @@ else
     SELECTED_SEARCH_VERSION=$(prompt_select "Select Elasticsearch version:" "$DEFAULT_ELASTIC_VERSION" "${ELASTIC_VERSIONS[@]}")
     SELECTED_SEARCH_IMAGE="docker.elastic.co/elasticsearch/elasticsearch:${SELECTED_SEARCH_VERSION}"
   else
-    OPENSEARCH_VERSIONS=("2.15.0" "2.11.0" "1.3.0")
+    OPENSEARCH_VERSIONS=("3.3.0" "3.0.0" "2.15.0" "2.11.0" "1.3.0")
     # Only use existing version if it's valid for OpenSearch and type hasn't changed
     if [[ "$EXISTING_SEARCH_ENGINE" == "OpenSearch" ]] && [[ " ${OPENSEARCH_VERSIONS[*]} " =~ " ${EXISTING_SEARCH_VERSION} " ]]; then
       DEFAULT_OPENSEARCH_VERSION="$EXISTING_SEARCH_VERSION"
     else
-      DEFAULT_OPENSEARCH_VERSION="2.15.0"
+      DEFAULT_OPENSEARCH_VERSION="3.3.0"
     fi
     SELECTED_SEARCH_VERSION=$(prompt_select "Select OpenSearch version:" "$DEFAULT_OPENSEARCH_VERSION" "${OPENSEARCH_VERSIONS[@]}")
     SELECTED_SEARCH_IMAGE="opensearchproject/opensearch:${SELECTED_SEARCH_VERSION}"

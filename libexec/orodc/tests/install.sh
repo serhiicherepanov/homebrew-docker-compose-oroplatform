@@ -9,6 +9,7 @@ source "${SCRIPT_DIR}/../lib/ui.sh"
 source "${SCRIPT_DIR}/../lib/environment.sh"
 
 # Check that we're in a project
+# Note: initialize_environment is called by router (bin/orodc) before routing to this script
 check_in_project || exit 1
 
 # Build test-aware compose command including test services

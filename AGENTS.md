@@ -468,6 +468,50 @@ git push origin <your-pr-branch>
 
 # 🔧 **PROJECT-SPECIFIC RULES**
 
+## 🔴 **CRITICAL: Always Start Analysis with Router**
+
+**⚡ MANDATORY: Always Check Router First!**
+
+When analyzing any command or feature, **ALWAYS start with the router** (`bin/orodc`):
+
+1. **Check how command is routed** - see which script/module handles it
+2. **Check initialization flow** - see if `initialize_environment` is called
+3. **Check command flow** - understand the execution path before diving into specific scripts
+
+**Why this matters:**
+- Router handles initialization (`initialize_environment`) for all commands
+- Router sets up environment variables, ports, and configuration
+- Router routes commands to appropriate modules
+- Many issues are solved at router level, not in individual scripts
+- Prevents duplicate initialization or missing setup
+
+**Router location:** `bin/orodc`
+**Key sections to check:**
+- Lines 122-139: Environment initialization logic
+- Lines 192-527: Command routing (case statement)
+
+**Example workflow:**
+```bash
+# 1. Check router first
+read_file bin/orodc
+
+# 2. Find command routing
+grep "command_name" bin/orodc
+
+# 3. Check initialization
+grep "initialize_environment" bin/orodc
+
+# 4. Then check specific script/module
+read_file libexec/orodc/specific-script.sh
+```
+
+**⛔ NEVER:**
+- ❌ Start analyzing individual scripts without checking router
+- ❌ Add duplicate initialization without checking router
+- ❌ Assume initialization happens without verifying
+
+---
+
 ## 🔴 **CRITICAL: After Modifying libexec/ or compose/ Files**
 
 **⚡ ALWAYS Reinstall Formula After Changes:**

@@ -14,6 +14,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 # SCRIPT_DIR will be .../libexec, so orodc modules are in ./orodc/
 LIBEXEC_DIR="${SCRIPT_DIR}/orodc"
+# Export SCRIPT_DIR so sourced libraries can use it to find orodc-find_free_port
+export SCRIPT_DIR
 
 # Source all library files
 source "${LIBEXEC_DIR}/lib/ui.sh"

@@ -21,29 +21,57 @@ find_and_export_ports() {
 
   # Find orodc-find_free_port utility
   # It's installed in libexec/ directory (same level as libexec/orodc/)
+  # In bin/orodc, SCRIPT_DIR points to libexec/, so orodc-find_free_port is at SCRIPT_DIR/orodc-find_free_port
   local find_port_bin=""
   
   # Try PATH first
   if command -v orodc-find_free_port >/dev/null 2>&1; then
     find_port_bin=$(command -v orodc-find_free_port)
+    debug_log "find_and_export_ports: found orodc-find_free_port in PATH: $find_port_bin"
   else
-    # Try relative to script location (libexec/orodc/lib/port-manager.sh -> libexec/orodc-find_free_port)
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local libexec_dir="$(dirname "$(dirname "$script_dir")")"
-    local candidate="${libexec_dir}/orodc-find_free_port"
-    
-    if [[ -x "$candidate" ]]; then
-      find_port_bin="$candidate"
+    # Try using SCRIPT_DIR from bin/orodc (points to libexec/)
+    # This is exported by bin/orodc before sourcing libraries
+    if [[ -n "${SCRIPT_DIR:-}" ]] && [[ -x "${SCRIPT_DIR}/orodc-find_free_port" ]]; then
+      find_port_bin="${SCRIPT_DIR}/orodc-find_free_port"
+      debug_log "find_and_export_ports: found orodc-find_free_port via SCRIPT_DIR: $find_port_bin"
     else
       # Try using DIR variable from environment.sh (points to share/docker-compose-oroplatform)
-      if [[ -n "${DIR:-}" ]] && [[ -x "${DIR}/../libexec/orodc-find_free_port" ]]; then
-        find_port_bin="${DIR}/../libexec/orodc-find_free_port"
+      # DIR is at <prefix>/share/docker-compose-oroplatform, libexec is at <prefix>/libexec/
+      if [[ -n "${DIR:-}" ]]; then
+        # DIR = <prefix>/share/docker-compose-oroplatform
+        # libexec = <prefix>/libexec/
+        # So: $(dirname "$DIR") = <prefix>/share, then ../libexec/ = <prefix>/libexec/
+        local prefix_dir="$(dirname "$(dirname "$DIR")")"
+        local candidate="${prefix_dir}/libexec/orodc-find_free_port"
+        debug_log "find_and_export_ports: checking DIR-based path: $candidate (DIR=${DIR}, prefix_dir=${prefix_dir})"
+        if [[ -x "$candidate" ]]; then
+          find_port_bin="$candidate"
+          debug_log "find_and_export_ports: found orodc-find_free_port via DIR: $find_port_bin"
+        else
+          debug_log "find_and_export_ports: $candidate not found or not executable"
+        fi
+      fi
+      
+      # Fallback: try relative to current script (for development/testing)
+      if [[ -z "$find_port_bin" ]]; then
+        local script_file="${BASH_SOURCE[0]}"
+        if [[ -n "$script_file" ]] && [[ -f "$script_file" ]]; then
+          local script_dir="$(cd "$(dirname "$script_file")" && pwd)"
+          local libexec_dir="$(dirname "$(dirname "$script_dir")")"
+          local candidate="${libexec_dir}/orodc-find_free_port"
+          debug_log "find_and_export_ports: checking script-relative path: $candidate (script_dir=$script_dir)"
+          
+          if [[ -x "$candidate" ]]; then
+            find_port_bin="$candidate"
+            debug_log "find_and_export_ports: found orodc-find_free_port via script path: $find_port_bin"
+          fi
+        fi
       fi
     fi
   fi
 
   if [[ -z "$find_port_bin" ]] || [[ ! -x "$find_port_bin" ]]; then
-    debug_log "find_and_export_ports: orodc-find_free_port not found, using prefix-based ports"
+    debug_log "find_and_export_ports: orodc-find_free_port not found (checked PATH, DIR=${DIR:-not set}, script path), using prefix-based ports"
     return 0
   fi
 
@@ -127,15 +155,25 @@ find_single_port() {
   
   if command -v orodc-find_free_port >/dev/null 2>&1; then
     find_port_bin=$(command -v orodc-find_free_port)
-  else
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local libexec_dir="$(dirname "$(dirname "$script_dir")")"
-    local candidate="${libexec_dir}/orodc-find_free_port"
-    
+  elif [[ -n "${SCRIPT_DIR:-}" ]] && [[ -x "${SCRIPT_DIR}/orodc-find_free_port" ]]; then
+    find_port_bin="${SCRIPT_DIR}/orodc-find_free_port"
+  elif [[ -n "${DIR:-}" ]]; then
+    local prefix_dir="$(dirname "$(dirname "$DIR")")"
+    local candidate="${prefix_dir}/libexec/orodc-find_free_port"
     if [[ -x "$candidate" ]]; then
       find_port_bin="$candidate"
-    elif [[ -n "${DIR:-}" ]] && [[ -x "${DIR}/../libexec/orodc-find_free_port" ]]; then
-      find_port_bin="${DIR}/../libexec/orodc-find_free_port"
+    fi
+  else
+    # Fallback: try relative to current script
+    local script_file="${BASH_SOURCE[0]}"
+    if [[ -n "$script_file" ]] && [[ -f "$script_file" ]]; then
+      local script_dir="$(cd "$(dirname "$script_file")" && pwd)"
+      local libexec_dir="$(dirname "$(dirname "$script_dir")")"
+      local candidate="${libexec_dir}/orodc-find_free_port"
+      
+      if [[ -x "$candidate" ]]; then
+        find_port_bin="$candidate"
+      fi
     fi
   fi
 

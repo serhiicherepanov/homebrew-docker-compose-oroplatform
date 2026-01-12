@@ -257,19 +257,21 @@ is_port_used_batch() {
   # Docker bind will fail if port is already allocated, even by our own containers
   local port_in_use=false
   
-  # Method 1: lsof (works for most processes)
-  if lsof -t -i tcp:$p -sTCP:LISTEN > /dev/null 2>&1; then
-    port_in_use=true
-  fi
-  
-  # Method 2: ss (more reliable for Docker ports)
+  # Method 1: ss (most reliable for Docker ports, check first)
   if command -v ss >/dev/null 2>&1; then
-    if ss -tlnp 2>/dev/null | grep -q ":${p} "; then
+    if ss -tln 2>/dev/null | grep -q ":${p} "; then
       port_in_use=true
     fi
-  # Method 3: netstat (fallback)
+  # Method 2: netstat (fallback if ss not available)
   elif command -v netstat >/dev/null 2>&1; then
-    if netstat -tlnp 2>/dev/null | grep -q ":${p} "; then
+    if netstat -tln 2>/dev/null | grep -q ":${p} "; then
+      port_in_use=true
+    fi
+  fi
+  
+  # Method 3: lsof (additional check, but less reliable for Docker ports)
+  if [[ "$port_in_use" == "false" ]] && command -v lsof >/dev/null 2>&1; then
+    if lsof -t -i tcp:$p -sTCP:LISTEN > /dev/null 2>&1; then
       port_in_use=true
     fi
   fi

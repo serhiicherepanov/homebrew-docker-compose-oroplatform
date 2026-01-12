@@ -40,7 +40,7 @@ class DockerComposeOroplatform < Formula
 
     # Create bin symlink to the main dispatcher (no wrapper, direct symlink)
     bin.install_symlink libexec/"orodc-main" => "orodc"
-    bin.install_symlink libexec/"orodc-find_qfree_port" => "orodc-find_free_port"
+    bin.install_symlink libexec/"orodc-find_free_port" => "orodc-find_free_port"
 
     # Copy compose directory recursively
     pkgshare.mkpath

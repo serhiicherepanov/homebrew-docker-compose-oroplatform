@@ -19,16 +19,38 @@ find_and_export_ports() {
   export DC_ORO_PORT_MAIL_WEBGUI="${DC_ORO_PORT_MAIL_WEBGUI:-${DC_ORO_PORT_PREFIX}25}"
   export DC_ORO_PORT_SSH="${DC_ORO_PORT_SSH:-${DC_ORO_PORT_PREFIX}22}"
 
-  # Try to find free ports using orodc-find_free_port if available
-  if ! command -v orodc-find_free_port >/dev/null 2>&1; then
+  # Find orodc-find_free_port utility
+  # It's installed in libexec/ directory (same level as libexec/orodc/)
+  local find_port_bin=""
+  
+  # Try PATH first
+  if command -v orodc-find_free_port >/dev/null 2>&1; then
+    find_port_bin=$(command -v orodc-find_free_port)
+  else
+    # Try relative to script location (libexec/orodc/lib/port-manager.sh -> libexec/orodc-find_free_port)
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local libexec_dir="$(dirname "$(dirname "$script_dir")")"
+    local candidate="${libexec_dir}/orodc-find_free_port"
+    
+    if [[ -x "$candidate" ]]; then
+      find_port_bin="$candidate"
+    else
+      # Try using DIR variable from environment.sh (points to share/docker-compose-oroplatform)
+      if [[ -n "${DIR:-}" ]] && [[ -x "${DIR}/../libexec/orodc-find_free_port" ]]; then
+        find_port_bin="${DIR}/../libexec/orodc-find_free_port"
+      fi
+    fi
+  fi
+
+  if [[ -z "$find_port_bin" ]] || [[ ! -x "$find_port_bin" ]]; then
     debug_log "find_and_export_ports: orodc-find_free_port not found, using prefix-based ports"
     return 0
   fi
 
-  debug_log "find_and_export_ports: project=${project_name}, config_dir=${config_dir}, prefix=${DC_ORO_PORT_PREFIX}"
+  debug_log "find_and_export_ports: project=${project_name}, config_dir=${config_dir}, prefix=${DC_ORO_PORT_PREFIX}, bin=${find_port_bin}"
 
   # Use batch port resolution for better performance
-  BATCH_PORTS=$(orodc-find_free_port --batch "${project_name}" "$config_dir" \
+  BATCH_PORTS=$("$find_port_bin" --batch "${project_name}" "$config_dir" \
     nginx "${DC_ORO_PORT_PREFIX}80" \
     xhgui "${DC_ORO_PORT_PREFIX}81" \
     database "${DC_ORO_PORT_PREFIX}06" \
@@ -100,5 +122,27 @@ find_single_port() {
   local service_name="$3"
   local default_port="$4"
 
-  orodc-find_free_port "$project_name" "$config_dir" "$service_name" "$default_port"
+  # Find orodc-find_free_port utility (same logic as find_and_export_ports)
+  local find_port_bin=""
+  
+  if command -v orodc-find_free_port >/dev/null 2>&1; then
+    find_port_bin=$(command -v orodc-find_free_port)
+  else
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local libexec_dir="$(dirname "$(dirname "$script_dir")")"
+    local candidate="${libexec_dir}/orodc-find_free_port"
+    
+    if [[ -x "$candidate" ]]; then
+      find_port_bin="$candidate"
+    elif [[ -n "${DIR:-}" ]] && [[ -x "${DIR}/../libexec/orodc-find_free_port" ]]; then
+      find_port_bin="${DIR}/../libexec/orodc-find_free_port"
+    fi
+  fi
+
+  if [[ -z "$find_port_bin" ]] || [[ ! -x "$find_port_bin" ]]; then
+    echo "$default_port"
+    return 0
+  fi
+
+  "$find_port_bin" "$project_name" "$config_dir" "$service_name" "$default_port"
 }

@@ -474,9 +474,14 @@ initialize_environment() {
     if [[ "${DC_ORO_REDIS_URI:-}" == "" ]]; then
       unset DC_ORO_REDIS_URI
     fi
-    if [[ "${DC_ORO_COMPOSER_AUTH:-}" == "" ]]; then
-      unset DC_ORO_COMPOSER_AUTH
+    # COMPOSER_AUTH: Check for COMPOSER_AUTH and use it if DC_ORO_COMPOSER_AUTH is not set
+    # This allows users to set COMPOSER_AUTH directly in their environment
+    if [[ -z "${DC_ORO_COMPOSER_AUTH:-}" ]] && [[ -n "${COMPOSER_AUTH:-}" ]]; then
+      export DC_ORO_COMPOSER_AUTH="$COMPOSER_AUTH"
+      debug_log "initialize_environment: using COMPOSER_AUTH for DC_ORO_COMPOSER_AUTH"
     fi
+    # Don't unset DC_ORO_COMPOSER_AUTH if empty - Docker Compose needs it to pass to containers
+    # Empty string will be handled by docker-compose.yml syntax: ${DC_ORO_COMPOSER_AUTH:-""}
     # Normalize ORO_MAILER_ENCRYPTION: handle "null" (string) and empty string - set to tls
     # CRITICAL: This must happen AFTER loading all .env files to ensure orodc is source of truth
     if [[ -z "${ORO_MAILER_ENCRYPTION:-}" ]] || [[ "${ORO_MAILER_ENCRYPTION:-}" == "" ]] || [[ "${ORO_MAILER_ENCRYPTION:-}" == "null" ]]; then

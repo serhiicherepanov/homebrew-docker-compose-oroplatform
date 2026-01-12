@@ -432,8 +432,14 @@ initialize_environment() {
   export DOCKER_COMPOSE_VERSION=$($DOCKER_COMPOSE_BIN_CMD version | grep -E '[0-9]+\.[0-9]+\.[0-9]+' -o | head -1 | awk -F. '{ print $1 }')
 
   # Find project directory
+  # First try to find composer.json (for existing OroPlatform projects)
   if [[ -z "${DC_ORO_APPDIR:-}" ]]; then
     export DC_ORO_APPDIR=$(find-up composer.json)
+  fi
+
+  # If composer.json not found, check for .env.orodc (for projects after init)
+  if [[ -z "${DC_ORO_APPDIR:-}" ]]; then
+    export DC_ORO_APPDIR=$(find-up .env.orodc)
   fi
 
   if [[ -z "${DC_ORO_APPDIR:-}" ]]; then
@@ -468,9 +474,14 @@ initialize_environment() {
     if [[ "${DC_ORO_REDIS_URI:-}" == "" ]]; then
       unset DC_ORO_REDIS_URI
     fi
-    if [[ "${DC_ORO_COMPOSER_AUTH:-}" == "" ]]; then
-      unset DC_ORO_COMPOSER_AUTH
+    # COMPOSER_AUTH: Check for COMPOSER_AUTH and use it if DC_ORO_COMPOSER_AUTH is not set
+    # This allows users to set COMPOSER_AUTH directly in their environment
+    if [[ -z "${DC_ORO_COMPOSER_AUTH:-}" ]] && [[ -n "${COMPOSER_AUTH:-}" ]]; then
+      export DC_ORO_COMPOSER_AUTH="$COMPOSER_AUTH"
+      debug_log "initialize_environment: using COMPOSER_AUTH for DC_ORO_COMPOSER_AUTH"
     fi
+    # Don't unset DC_ORO_COMPOSER_AUTH if empty - Docker Compose needs it to pass to containers
+    # Empty string will be handled by docker-compose.yml syntax: ${DC_ORO_COMPOSER_AUTH:-""}
     # Normalize ORO_MAILER_ENCRYPTION: handle "null" (string) and empty string - set to tls
     # CRITICAL: This must happen AFTER loading all .env files to ensure orodc is source of truth
     if [[ -z "${ORO_MAILER_ENCRYPTION:-}" ]] || [[ "${ORO_MAILER_ENCRYPTION:-}" == "" ]] || [[ "${ORO_MAILER_ENCRYPTION:-}" == "null" ]]; then
@@ -761,6 +772,14 @@ initialize_environment() {
       find_and_export_ports "${DC_ORO_NAME}" "${DC_ORO_CONFIG_DIR}"
       debug_log "initialize_environment: STEP 5 - After find_and_export_ports"
       debug_log "initialize_environment: STEP 5 - ports set - MQ=${DC_ORO_PORT_MQ:-not set}, SEARCH=${DC_ORO_PORT_SEARCH:-not set}, MAIL=${DC_ORO_PORT_MAIL_WEBGUI:-not set}"
+      
+      # Update compose.yml with new ports to ensure consistency
+      # This ensures that ports found by find_and_export_ports are saved to compose.yml
+      # so that subsequent commands (like ssh) use the same ports
+      if [[ -n "${DOCKER_COMPOSE_BIN_CMD:-}" ]]; then
+        eval "${DOCKER_COMPOSE_BIN_CMD} config" > "${DC_ORO_CONFIG_DIR}/compose.yml" 2>/dev/null || true
+        debug_log "initialize_environment: STEP 6 - compose.yml updated with new ports"
+      fi
     else
       debug_log "initialize_environment: STEP 5 - skipping port allocation - DC_ORO_NAME=${DC_ORO_NAME:-not set}, DC_ORO_CONFIG_DIR=${DC_ORO_CONFIG_DIR:-not set}"
     fi

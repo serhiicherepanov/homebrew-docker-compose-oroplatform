@@ -256,6 +256,86 @@ prompt_selector() {
   done
 }
 
+# Interactive selector with numbered list display
+# Usage: prompt_select "prompt text" "default" "option1" "option2" ...
+# Shows numbered list and allows selection by number
+prompt_select() {
+  local prompt="$1"
+  local default="$2"
+  shift 2
+  local options=("$@")
+  local result=""
+  
+  # Debug: show what we received
+  if [[ -n "${DEBUG:-}" ]]; then
+    >&2 echo "DEBUG: prompt='$prompt', default='$default', options count=${#options[@]}"
+    >&2 echo "DEBUG: options=(${options[*]})"
+  fi
+  
+  # Check if we have options
+  if [[ ${#options[@]} -eq 0 ]]; then
+    >&2 echo "ERROR: No options provided!"
+    echo "$default"
+    return
+  fi
+  
+  while true; do
+    # Output to stderr to avoid interfering with return value
+    >&2 echo -e "\033[36m==> $prompt\033[0m"
+    
+    local i=1
+    for opt in "${options[@]}"; do
+      if [[ "$opt" == "$default" ]]; then
+        >&2 echo "  $i) $opt [default]"
+      else
+        >&2 echo "  $i) $opt"
+      fi
+      ((i++))
+    done
+    
+    # Read from terminal
+    local selection
+    >&2 echo -n "Select [1-${#options[@]}] (default: $default): "
+    read selection </dev/tty
+    
+    # Empty input - use default
+    if [[ -z "$selection" ]]; then
+      result="$default"
+      break
+    fi
+    
+    # Check if input is a valid number
+    if [[ ! "$selection" =~ ^[0-9]+$ ]]; then
+      >&2 echo -e "\033[31mInvalid input: '$selection'. Please enter a number between 1 and ${#options[@]}.\033[0m"
+      continue
+    fi
+    
+    # Check if number is in valid range
+    local idx=$((selection - 1))
+    if [[ $idx -ge 0 && $idx -lt ${#options[@]} ]]; then
+      result="${options[$idx]}"
+      break
+    else
+      >&2 echo -e "\033[31mInvalid choice: '$selection'. Please enter a number between 1 and ${#options[@]}.\033[0m"
+    fi
+  done
+  
+  # Debug output if needed
+  if [[ -n "${DEBUG:-}" ]]; then
+    >&2 echo "DEBUG: prompt_select returned: '$result'"
+  fi
+  
+  # Return selected value to stdout
+  echo "$result"
+}
+
+# Prompt for yes/no with default (alias for confirm_yes_no for compatibility)
+# Usage: prompt_yes_no "prompt text" "default" (default: yes or no)
+# Returns: 0 for yes, 1 for no
+prompt_yes_no() {
+  confirm_yes_no "$@"
+}
+
 # Prompt for port number with validation
 # Usage: prompt_port "prompt text" "default_port"
 prompt_port() {

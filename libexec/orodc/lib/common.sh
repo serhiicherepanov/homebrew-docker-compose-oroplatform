@@ -278,6 +278,21 @@ parse_compose_flags() {
   done
 }
 
+# Function to get compatible Node.js versions based on PHP version (sorted newest to oldest)
+# Usage: get_compatible_node_versions "php_version"
+# Example: get_compatible_node_versions "8.4" returns "22 20 18"
+get_compatible_node_versions() {
+  local php_ver="$1"
+  case "$php_ver" in
+    7.3) echo "16" ;;
+    7.4) echo "18 16" ;;
+    8.1) echo "22 20 18 16" ;;
+    8.2|8.3|8.4) echo "22 20 18" ;;
+    8.5) echo "24 22" ;;
+    *) echo "22 20 18" ;;
+  esac
+}
+
 # Detect if current project is an Oro Platform application
 # Returns 0 (true) if Oro project, 1 (false) otherwise
 # Can be overridden with DC_ORO_IS_ORO_PROJECT env var

@@ -62,7 +62,7 @@ services:
       - 'ORO_MAILER_PASSWORD=${ORO_MAILER_PASSWORD:-}'
       - 'ORO_SECRET=${ORO_SECRET-ThisTokenIsNotSoSecretChangeIt}'
       - 'ORO_ENABLE_PRICE_SHARDING=${ORO_ENABLE_PRICE_SHARDING:-0}'
-      - 'COMPOSER_AUTH=${DC_ORO_COMPOSER_AUTH:-""}'
+      - 'COMPOSER_AUTH=${DC_ORO_COMPOSER_AUTH}'
       - 'NODE_OPTIONS="--max-old-space-size=1024"'
       - 'XDEBUG_MODE=${XDEBUG_MODE_FPM:-off}'
     restart: "no"
@@ -192,7 +192,7 @@ services:
       - 'ORO_MAILER_HOST=${DC_ORO_TEST_MAILER_HOST:-${ORO_MAILER_HOST:-mail}}'
       - 'ORO_MAILER_PORT=${DC_ORO_TEST_MAILER_PORT:-${ORO_MAILER_PORT:-1025}}'
       - 'ORO_SECRET=${DC_ORO_TEST_SECRET:-${ORO_SECRET-ThisTokenIsNotSoSecretChangeIt}}'
-      - 'COMPOSER_AUTH=${DC_ORO_COMPOSER_AUTH:-""}'
+      - 'COMPOSER_AUTH=${DC_ORO_COMPOSER_AUTH}'
       - 'NODE_OPTIONS="--max-old-space-size=1024"'
       - 'SYMFONY_ENV=test'
       - 'ORO_ENV=test'
@@ -265,7 +265,7 @@ services:
       - 'ORO_MAILER_HOST=${DC_ORO_TEST_MAILER_HOST:-${ORO_MAILER_HOST:-mail}}'
       - 'ORO_MAILER_PORT=${DC_ORO_TEST_MAILER_PORT:-${ORO_MAILER_PORT:-1025}}'
       - 'ORO_SECRET=${DC_ORO_TEST_SECRET:-${ORO_SECRET-ThisTokenIsNotSoSecretChangeIt}}'
-      - 'COMPOSER_AUTH=${DC_ORO_COMPOSER_AUTH:-""}'
+      - 'COMPOSER_AUTH=${DC_ORO_COMPOSER_AUTH}'
       - 'NODE_OPTIONS="--max-old-space-size=1024"'
       - 'XDEBUG_MODE=${XDEBUG_MODE_CONSUMER:-off}'
     depends_on:

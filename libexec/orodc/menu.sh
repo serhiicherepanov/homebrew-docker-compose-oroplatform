@@ -34,7 +34,7 @@ run_command_with_menu_return() {
   fi
   
   # Show what command will be executed (for user feedback)
-  msg_info "Executing: orodc $cmd $*" >&2
+  msg_debug "Executing: orodc $cmd $*" >&2
   # Flush output buffers to ensure message is displayed before exec
   echo "" >&2
   

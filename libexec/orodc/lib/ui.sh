@@ -8,6 +8,13 @@ msg_info() {
   >&2 echo -e "\033[36m==> $1\033[0m"
 }
 
+# Function to display debug/trace messages (dark gray)
+# Used for verbose output like "Executing: orodc command"
+msg_debug() {
+  # Always write to stderr (>&2) to keep separate from command stdout
+  >&2 echo -e "\033[90m==> $1\033[0m"
+}
+
 # Function to display warning messages
 msg_warning() {
   # Always write to stderr (>&2) to keep separate from command stdout

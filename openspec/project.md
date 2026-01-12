@@ -89,10 +89,144 @@ The tool is distributed as a Homebrew formula and manages multi-container Docker
 ├── Formula/                # Homebrew formula definition
 ├── docs/                   # Documentation and assets
 ├── openspec/              # Change proposals and specifications
+├── libexec/orodc/         # CLI command modules (modular architecture)
+│   ├── lib/              # Shared libraries
+│   ├── database/        # Database command modules
+│   ├── tests/           # Testing command modules
+│   ├── proxy/           # Proxy management modules
+│   ├── image/           # Image building modules
+│   └── *.sh             # Single-file command modules
 └── .github/workflows/     # CI/CD pipeline definitions
 ```
 
 ### Architecture Patterns
+
+#### CLI Modular Architecture
+
+OroDC follows a modular architecture pattern where the main `bin/orodc` script acts as a lightweight command router, delegating execution to specialized modules in `libexec/orodc/`. This design enables maintainability, testability, and clear separation of concerns.
+
+**Main Entry Point:**
+- `bin/orodc` - Main CLI router (handles version, help, environment initialization, and command routing)
+
+**Module Structure:**
+
+```
+libexec/orodc/
+├── lib/                    # Shared libraries
+│   ├── common.sh          # Common utilities (logging, timing, binary resolution)
+│   ├── ui.sh              # UI functions (messages, spinners, prompts)
+│   ├── environment.sh     # Environment initialization and registry
+│   ├── docker-utils.sh    # Docker Compose utilities
+│   └── port-manager.sh    # Port management and allocation
+│
+├── database/              # Database command modules
+│   ├── mysql.sh           # MySQL client access
+│   ├── psql.sh            # PostgreSQL client access
+│   ├── import.sh          # Database import operations
+│   ├── export.sh          # Database export operations
+│   ├── cli.sh             # CLI container access
+│   ├── purge.sh           # Database purge operations
+│   └── recreate.sh        # Database recreation
+│
+├── tests/                 # Testing command modules
+│   ├── install.sh         # Test environment installation
+│   ├── run.sh             # Test runner
+│   ├── behat.sh           # Behat test execution
+│   ├── phpunit.sh         # PHPUnit test execution
+│   └── shell.sh           # Test shell access
+│
+├── proxy/                 # Proxy management modules
+│   ├── up.sh              # Start Traefik proxy
+│   ├── down.sh            # Stop proxy
+│   └── install-certs.sh   # Install CA certificates
+│
+├── image/                 # Image building modules
+│   └── build.sh           # Build Docker images
+│
+├── compose.sh             # Docker Compose operations
+├── init.sh                # Environment initialization
+├── purge.sh               # Environment cleanup
+├── config-refresh.sh       # Configuration refresh
+├── ssh.sh                 # SSH connection to containers
+├── install.sh             # Platform installation
+├── cache.sh               # Cache management
+├── php.sh                 # PHP command execution
+├── composer.sh            # Composer command execution
+├── platform-update.sh      # Platform update operations
+├── doctor.sh              # Health check and diagnostics
+├── exec.sh                # Container execution
+├── conf.sh                # Configuration management
+├── list.sh                # List environments
+└── menu.sh                # Interactive menu system
+```
+
+**Command Routing Patterns:**
+
+1. **Command Groups** - Commands organized into groups with subcommands:
+   ```bash
+   orodc database mysql      → libexec/orodc/database/mysql.sh
+   orodc database psql       → libexec/orodc/database/psql.sh
+   orodc tests phpunit       → libexec/orodc/tests/phpunit.sh
+   orodc proxy up            → libexec/orodc/proxy/up.sh
+   orodc image build         → libexec/orodc/image/build.sh
+   ```
+
+2. **Single-File Commands** - Simple commands route directly to single modules:
+   ```bash
+   orodc init                → libexec/orodc/init.sh
+   orodc ssh                 → libexec/orodc/ssh.sh
+   orodc install             → libexec/orodc/install.sh
+   ```
+
+3. **Command Aliases** - Convenient aliases for common operations:
+   ```bash
+   orodc start               → orodc compose up -d
+   orodc stop                → orodc compose stop
+   orodc mysql               → orodc database mysql
+   orodc psql                → orodc database psql
+   ```
+
+**Module Execution Pattern:**
+
+All modules follow a consistent pattern:
+
+```bash
+#!/bin/bash
+set -e
+if [ "$DEBUG" ]; then set -x; fi
+
+# Determine script directory and source libraries
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../lib/common.sh"
+source "${SCRIPT_DIR}/../lib/ui.sh"
+source "${SCRIPT_DIR}/../lib/environment.sh"
+
+# Module-specific logic here
+# ...
+
+# Execute command (often with exec for process replacement)
+exec "${COMMAND}" "$@"
+```
+
+**Library Architecture:**
+
+- **`common.sh`**: Binary resolution, timing functions, environment variable management, flag parsing utilities
+- **`ui.sh`**: Message functions (msg_info, msg_error, msg_warning, msg_ok), spinner display, user prompts
+- **`environment.sh`**: Environment initialization, project detection, environment registry, status detection
+- **`docker-utils.sh`**: Compose config generation, compose command execution, certificate setup, service URL display
+- **`port-manager.sh`**: Port allocation, port conflict detection, batch port resolution
+
+**Benefits:**
+- **Maintainability**: Each command is isolated and easy to modify
+- **Testability**: Modules can be tested independently
+- **Extensibility**: New commands can be added without modifying the main router
+- **Separation of Concerns**: Clear boundaries between routing, initialization, and command logic
+
+**Implementation Reference:**
+- Main router: `bin/orodc` (command routing logic)
+- Module examples: `libexec/orodc/database/mysql.sh`, `libexec/orodc/tests/phpunit.sh`
+- Shared libraries: `libexec/orodc/lib/*.sh`
+- Architecture specification: `openspec/specs/cli-architecture/spec.md`
 
 #### UI/UX: Spinner Mechanism for Long-Running Commands
 

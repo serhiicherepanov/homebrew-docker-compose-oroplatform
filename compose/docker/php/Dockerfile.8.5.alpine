@@ -10,6 +10,7 @@ ARG EXT_REDIS_VERSION=1d07c3a07efaa7cf9e9a9e9c7f31834f285e4436
 ARG EXT_IGBINARY_VERSION=c7fe8aad3d7894bb85f5a189eba60dec9203950d
 ARG EXT_MONGODB_VERSION=049a2bf76b9419cbe5de100d912d648e0c38e10a
 ARG EXT_XDEBUG_VERSION=2d01ef1408eb8e350a3fef78b3db6d3da10c8620
+ARG EXT_YAML_VERSION=2.2.3
 
 # persistent / runtime deps
 RUN apk add --no-cache \
@@ -45,6 +46,7 @@ RUN apk add --no-cache \
     mysql-client \
     util-linux \
     patch \
+    yaml \
   ;
 
 ARG REDIS_VERSION="6.2.9"
@@ -70,6 +72,7 @@ RUN set -eux; \
     tidyhtml-dev \
     imap-dev \
     oniguruma-dev \
+    yaml-dev \
     musl-dev \ 
     gcc \
     make \
@@ -118,6 +121,14 @@ RUN set -eux; \
   docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) xdebug; \
   rm -rf /usr/src/php/ext/xdebug; \
   \
+  mkdir -p /usr/src/php/ext/yaml; \
+  git clone https://github.com/php/pecl-file_formats-yaml.git /usr/src/php/ext/yaml && \
+  cd /usr/src/php/ext/yaml && \
+  git checkout $EXT_YAML_VERSION && \
+  docker-php-ext-configure yaml; \
+  docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) yaml; \
+  rm -rf /usr/src/php/ext/yaml; \
+  \
   docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) \
     pdo_pgsql \
     pdo_mysql \
@@ -131,6 +142,7 @@ RUN set -eux; \
     tidy \
     pcntl \
     sockets \
+    ftp \
     bcmath \
     mbstring \
   ; \

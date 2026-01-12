@@ -1456,7 +1456,8 @@ run_goss_check_for_service() {
   # Always redirect output to log file
   # CRITICAL: Don't fail on error - just capture exit code
   # Use explicit command execution with error handling (don't use if/else to prevent interruption)
-  ${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} run --rm -T -q "${mount_args[@]}" cli goss -g /tmp/goss.yaml validate --format documentation > "$log_file" 2>&1 || true
+  # CRITICAL: Redirect stdin from /dev/null to prevent consuming lines from parent while-read loop
+  ${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} run --rm -T -q "${mount_args[@]}" cli goss -g /tmp/goss.yaml validate --format documentation < /dev/null > "$log_file" 2>&1 || true
   exit_code=$?
   
   # If exit code is 0 but there are failures in log, set exit code to 1
@@ -1572,6 +1573,9 @@ run_goss_checks_from_cli() {
     
     # Increment counter (don't fail on error)
     ((current_service++)) || true
+    
+    # DEBUG: Show which service we're processing
+    echo "[DEBUG] Processing service $current_service/$service_count: '$service'" >> /tmp/orodc-doctor-trace.log
     
     # Show progress if table mode
     if [[ "$show_table" == "true" ]]; then

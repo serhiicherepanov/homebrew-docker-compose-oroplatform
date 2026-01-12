@@ -468,6 +468,28 @@ git push origin <your-pr-branch>
 
 # 🔧 **PROJECT-SPECIFIC RULES**
 
+## 🔴 **CRITICAL: After Modifying libexec/ or compose/ Files**
+
+**⚡ ALWAYS Reinstall Formula After Changes:**
+
+When you modify files in `libexec/` or `compose/` directories, you **MUST** reinstall the Homebrew formula for changes to take effect:
+
+```bash
+brew reinstall digitalspacestdio/docker-compose-oroplatform/docker-compose-oroplatform
+```
+
+**Why:** Homebrew copies files to Cellar on install. Editing files in the tap directory doesn't affect the installed version.
+
+**When to reinstall:**
+- ✅ After ANY changes to `libexec/orodc/*.sh`
+- ✅ After ANY changes to `libexec/orodc/lib/*.sh`
+- ✅ After ANY changes to `compose/` YAML files
+- ✅ After ANY changes to `bin/` scripts
+
+**Exception:** Formula file (`Formula/*.rb`) changes apply immediately (no reinstall needed).
+
+---
+
 ## OroDC Command Detection
 OroDC **automatically detects** PHP commands:
 

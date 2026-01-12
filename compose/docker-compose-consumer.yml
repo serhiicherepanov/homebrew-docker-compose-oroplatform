@@ -66,7 +66,7 @@ services:
       - 'ORO_WEBSOCKET_BACKEND_DSN=${DC_ORO_WEBSOCKET_BACKEND_DSN:-tcp://websocket:8080}'
       - 'XHGUI_MONGO_HOSTNAME=mongodb'
       - 'XHGUI_MONGO_DATABASE=xhprof'
-      - 'COMPOSER_AUTH=${DC_ORO_COMPOSER_AUTH:-""}'
+      - 'COMPOSER_AUTH=${DC_ORO_COMPOSER_AUTH}'
       - 'NODE_OPTIONS="--max-old-space-size=1024"'
       - 'SYMFONY_ENV=${SYMFONY_ENV:-dev}'
       - 'XDEBUG_MODE=${XDEBUG_MODE_CONSUMER:-off}'

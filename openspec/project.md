@@ -94,6 +94,58 @@ The tool is distributed as a Homebrew formula and manages multi-container Docker
 
 ### Architecture Patterns
 
+#### UI/UX: Spinner Mechanism for Long-Running Commands
+
+OroDC uses a consistent spinner mechanism for all long-running operations to provide visual feedback and clean output.
+
+**Core Function: `run_with_spinner`**
+
+All long-running commands MUST use `run_with_spinner` from `libexec/orodc/lib/ui.sh`:
+
+```bash
+# Standard usage (like in start containers)
+run_with_spinner "Operation message" "$command" || exit $?
+
+# For non-critical operations (errors as warnings)
+if ! run_with_spinner "Operation message" "$command"; then
+  msg_warning "Operation completed with warnings (see log above for details)"
+fi
+```
+
+**Key Features:**
+
+1. **Automatic Spinner Display:**
+   - Shows animated spinner (`|/-\`) during command execution
+   - Writes spinner animation to stderr (doesn't interfere with command output)
+   - Automatically hides when `DEBUG=1` or `VERBOSE=1` is set
+
+2. **Output Redirection:**
+   - Command stdout/stderr redirected to temporary log file (`/tmp/orodc-output.XXXXXX`)
+   - Spinner animation displayed on stderr separately
+   - Keeps terminal output clean and readable
+
+3. **Error Handling:**
+   - On success: Log file is removed, success message displayed
+   - On failure: Log file preserved, error message shown with log location
+   - Last 20 lines of log displayed automatically (full log available at path)
+
+4. **Consistent Usage Pattern:**
+   - **Critical operations**: `run_with_spinner "Message" "$cmd" || exit $?`
+   - **Non-critical operations**: Check exit code, show warning instead of error
+   - **Always use**: Same pattern as `docker-utils.sh` for "Starting services"
+
+**Implementation Reference:**
+- Core function: `libexec/orodc/lib/ui.sh` (`run_with_spinner` function, lines 123-190)
+- Example usage: `libexec/orodc/lib/docker-utils.sh` (start containers, line 144)
+- Example with warnings: `libexec/orodc/cache.sh` (cache clear, lines 26-30)
+
+**Rules:**
+- ✅ ALWAYS use `run_with_spinner` for long-running operations
+- ✅ NEVER redirect stderr when using `run_with_spinner` (breaks spinner display)
+- ✅ Use same pattern as start containers everywhere
+- ❌ NEVER use `show_spinner` directly (use `run_with_spinner` wrapper)
+- ❌ NEVER capture stderr from `run_with_spinner` (spinner writes to stderr)
+
 #### Smart Command Detection
 OroDC automatically detects PHP commands and redirects them to the CLI container:
 - PHP flags (`-v`, `--version`, `-r`, `-l`, `-m`, `-i`) → `cli php [command]`
@@ -136,13 +188,15 @@ OroDC dynamically assembles the Docker Compose command by conditionally includin
 
 3. **Database-Specific Configuration**:
    - **PostgreSQL** (`docker-compose-pgsql.yml`):
-     - Loaded when `DC_ORO_DATABASE_SCHEMA` matches: `pgsql`, `postgres`, `postgresql`
-     - Uses pre-built image: `ghcr.io/digitalspacestdio/orodc-pgsql:15.1`
+     - Loaded when `DC_ORO_DATABASE_SCHEMA` is normalized to `postgres`
+     - Accepts values: `pgsql`, `postgres`, `postgresql`, `pdo_pgsql` (all normalized to `postgres`)
+     - Uses pre-built image: `ghcr.io/digitalspacestdio/orodc-pgsql:${DC_ORO_PGSQL_VERSION:-15.1}`
      - Custom image includes pgpool2 and pg_repack extensions
      - Sets `DC_ORO_DATABASE_PORT=5432`
    - **MySQL/MariaDB** (`docker-compose-mysql.yml`):
-     - Loaded when `DC_ORO_DATABASE_SCHEMA` matches: `mysql`, `mariadb`
-     - Uses official image: `mysql:8.0-oracle`
+     - Loaded when `DC_ORO_DATABASE_SCHEMA` is normalized to `mysql`
+     - Accepts values: `mysql`, `mariadb`, `pdo_mysql` (all normalized to `mysql`)
+     - Uses official image: `mysql:8.0-oracle` or `mariadb:10.11` (based on `DC_ORO_DATABASE_IMAGE`)
      - Sets `DC_ORO_DATABASE_PORT=3306`
 
 4. **User Custom Configuration** (`.docker-compose.user.yml`):
@@ -152,34 +206,62 @@ OroDC dynamically assembles the Docker Compose command by conditionally includin
 
 **Schema Detection Mechanism:**
 
+Database type detection follows a priority-based approach:
+
+1. **Primary Source: `.env.orodc` Configuration File**
+   - If `DC_ORO_DATABASE_SCHEMA` is set in `.env.orodc` (created by `orodc init`), use that value
+   - Values are normalized: `pgsql`, `postgresql`, `pdo_pgsql` → `postgres`
+   - Values are normalized: `mariadb`, `pdo_mysql` → `mysql`
+
+2. **Fallback: Parse `ORO_DB_URL` Environment Variable**
+   - If `DC_ORO_DATABASE_SCHEMA` is not set, parse `ORO_DB_URL` from `.env-app` or `.env-app.local`
+   - Function `parse_dsn_uri()` extracts schema from DSN URI
+   - Example: `postgres://user:pass@host:5432/db` → `DC_ORO_DATABASE_SCHEMA=postgres`
+   - Example: `mysql://user:pass@host:3306/db` → `DC_ORO_DATABASE_SCHEMA=mysql`
+
+3. **Persist Detected Schema**
+   - If schema was detected from `ORO_DB_URL`, save it to `.env.orodc` for future use
+   - This ensures subsequent runs use the cached value without re-parsing
+
+4. **Include Appropriate Compose File**
+   - For `postgres`: Add `docker-compose-pgsql.yml` to compose command
+   - For `mysql`: Add `docker-compose-mysql.yml` to compose command
+   - Normalized schema values (`postgres` or `mysql`) are used for matching
+
+**Implementation Flow:**
+
 ```bash
-# 1. Parse ORO_DB_URL environment variable (from .env-app or .env-app.local)
-parse_dsn_uri "$ORO_DB_URL" "database" "DC_ORO"
+# 1. Load environment files (including .env.orodc)
+load_env_safe "$DC_ORO_APPDIR/.env"
+load_env_safe "$DC_ORO_APPDIR/.env-app"
+load_env_safe "$DC_ORO_APPDIR/.env-app.local"
+load_env_safe "$DC_ORO_APPDIR/.env.orodc"
 
-# 2. Extract schema (postgres, mysql, etc.) into DC_ORO_DATABASE_SCHEMA
-# Example: postgres://user:pass@host:5432/db → DC_ORO_DATABASE_SCHEMA=postgres
+# 2. Check if DC_ORO_DATABASE_SCHEMA is already set from .env.orodc
+if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]] && [[ -n "${ORO_DB_URL:-}" ]]; then
+  # 3. Parse ORO_DB_URL to detect schema (normalizes to postgres/mysql)
+  parse_dsn_uri "${ORO_DB_URL}" "database" "DC_ORO"
+  
+  # 4. Save detected schema to .env.orodc for future use
+  if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
+    update_env_file "DC_ORO_DATABASE_SCHEMA" "${DC_ORO_DATABASE_SCHEMA}"
+  fi
+fi
 
-# 3. Include appropriate compose file
-if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]]; then
+# 5. Normalize schema value from .env.orodc if needed
+# (pgsql → postgres, mariadb → mysql)
+
+# 6. Include appropriate compose file based on normalized schema
+if [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]]; then
   DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-pgsql.yml"
-elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "mariadb" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]]; then
+elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]]; then
   DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-mysql.yml"
 fi
 ```
 
-**Busybox Cleanup:**
+**Note on Busybox Containers:**
 
-After loading database-specific compose files, OroDC automatically removes any running dummy database containers:
-
-```bash
-# Detect busybox database container
-SERVICE_DATABASE_ID=$(${DOCKER_COMPOSE_BIN_CMD} ps -q database)
-if [[ -n "$SERVICE_DATABASE_ID" ]] && docker inspect -f '{{ .Config.Image }}' "$SERVICE_DATABASE_ID" | grep -q 'busybox'; then
-  # Stop and remove dummy container
-  ${DOCKER_COMPOSE_BIN_CMD} stop database
-  ${DOCKER_COMPOSE_BIN_CMD} rm -f database
-fi
-```
+The base `docker-compose.yml` includes a dummy `database` service using busybox. When the correct database-specific compose file (`docker-compose-pgsql.yml` or `docker-compose-mysql.yml`) is loaded, Docker Compose automatically replaces the busybox service definition with the real database service. No explicit cleanup is needed - the correct compose file takes precedence.
 
 **Final Command Example:**
 
@@ -215,15 +297,26 @@ This shows:
 
 **Common Issues:**
 
-- **Database container not starting**: Check `ORO_DB_URL` is set correctly in `.env-app.local`
-- **Busybox database persists**: `DC_ORO_DATABASE_SCHEMA` not detected - verify DSN parsing with `DEBUG=1`
-- **Wrong database type**: Schema detection case-sensitive - use lowercase values in `ORO_DB_URL`
-- **Container keeps stopping**: Normal behavior during busybox → real database transition
+- **Database container not starting**: 
+  - Check `DC_ORO_DATABASE_SCHEMA` is set in `.env.orodc` (from `orodc init`)
+  - Or verify `ORO_DB_URL` is set correctly in `.env-app` or `.env-app.local`
+  - Use `DEBUG=1 orodc up -d` to see schema detection process
+
+- **Wrong database type detected**: 
+  - Schema values are normalized automatically (`pgsql` → `postgres`, `mariadb` → `mysql`)
+  - Check `.env.orodc` for `DC_ORO_DATABASE_SCHEMA` value
+  - If incorrect, manually set in `.env.orodc` or fix `ORO_DB_URL` format
+
+- **Schema not detected**: 
+  - Ensure `.env.orodc` exists with `DC_ORO_DATABASE_SCHEMA` (from `orodc init`)
+  - Or ensure `ORO_DB_URL` is in correct format: `postgres://user:pass@host:port/db` or `mysql://user:pass@host:port/db`
+  - Use `DEBUG=1` to see parsing output
 
 **Implementation Reference:**
-- Database detection: `bin/orodc:1151` (parse_dsn_uri call)
-- Compose file inclusion: `bin/orodc:1259-1269`
-- Busybox cleanup: `bin/orodc:1270-1276`
+- Database detection: `libexec/orodc/lib/environment.sh` (`initialize_environment` function)
+- DSN parsing: `libexec/orodc/lib/common.sh` (`parse_dsn_uri` function)
+- Compose file inclusion: `libexec/orodc/lib/environment.sh` (database-specific compose file loading)
+- Schema persistence: `libexec/orodc/lib/environment.sh` (saves to `.env.orodc` after detection)
 
 #### Configuration Caching and Updates
 

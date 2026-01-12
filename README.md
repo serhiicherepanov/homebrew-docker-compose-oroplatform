@@ -31,6 +31,10 @@
   - [Verification](#verification)
   - [Troubleshooting Infrastructure](#troubleshooting-infrastructure)
 - [📖 Usage](#-usage)
+  - [🚀 Basic Commands](#-basic-commands)
+  - [📦 Command Structure](#-command-structure)
+  - [🎮 Interactive Menu](#-interactive-menu)
+  - [🎯 Smart PHP Commands & Flags](#-smart-php-commands--flags)
 - [🧪 Testing](#-testing)
   - [Test Environment Setup](#test-environment-setup)
   - [Running Tests](#running-tests)
@@ -38,6 +42,8 @@
 - [🔧 Development Commands](#-development-commands)
 - [🔌 Reverse Proxy Management](#-reverse-proxy-management)
 - [🌐 Multiple Hosts Configuration](#-multiple-hosts-configuration)
+  - [📝 Configuration Methods](#-configuration-methods)
+  - [🔗 Application URL Configuration](#-application-url-configuration)
 - [🌐 Dynamic Multisite Support via URL Paths](#-dynamic-multisite-support-via-url-paths)
 - [⚙️ Environment Variables](#️-environment-variables)
 - [🐳 Custom Docker Images](#-custom-docker-images)
@@ -440,17 +446,176 @@ orodc help                   # Show full documentation (README)
 orodc man                    # Alternative help command
 orodc version                # Show OroDC version
 
+# Interactive menu (runs automatically when no arguments)
+orodc                        # Launch interactive menu
+
+# Environment management
+orodc init                   # Initialize new environment
+orodc list                   # List and switch between environments
+
 # Start the environment
 orodc up -d
 
 # Install application (only once)
 orodc install
 
+# Configuration
+orodc conf domains           # Manage domains interactively
+orodc conf url               # Configure application URL interactively
+
 # Connect via SSH
 orodc ssh
 
 # Stop the environment
 orodc down
+```
+
+### 📦 Command Structure
+
+OroDC uses a modular command structure with convenient aliases:
+
+#### Docker Compose Commands
+
+```bash
+# Full syntax (explicit)
+orodc compose up -d              # Start services
+orodc compose down               # Stop services
+orodc compose ps                 # List services
+orodc compose logs -f            # Follow logs
+orodc compose build              # Build images
+
+# Convenient aliases (recommended)
+orodc start                      # Same as: orodc compose up -d
+orodc up                         # Same as: orodc compose up
+orodc down                       # Same as: orodc compose down
+orodc ps                         # Same as: orodc compose ps
+orodc logs                       # Same as: orodc compose logs
+orodc stop                       # Same as: orodc compose stop
+orodc restart                    # Same as: orodc compose restart
+```
+
+#### Database Commands
+
+```bash
+# Full syntax
+orodc database mysql             # MySQL CLI
+orodc database psql              # PostgreSQL CLI
+orodc database import            # Import database
+orodc database export            # Export database
+orodc database cli               # Database CLI bash
+
+# Convenient aliases (recommended)
+orodc mysql                      # Same as: orodc database mysql
+orodc psql                       # Same as: orodc database psql
+orodc cli                        # Same as: orodc database cli
+```
+
+#### Other Command Groups
+
+```bash
+# Installation
+orodc install                    # Install with demo data
+orodc install without demo       # Install without demo data
+
+# Environment management
+orodc init                       # Initialize environment
+orodc list                       # List all environments (interactive)
+orodc list table                 # List environments as table (non-interactive)
+orodc list json                  # List environments as JSON (non-interactive)
+
+# Configuration
+orodc conf domains               # Manage domains (interactive)
+orodc conf domains list          # List domains (non-interactive)
+orodc conf domains add <domain>  # Add domain (non-interactive)
+orodc conf domains remove <domain> # Remove domain (non-interactive)
+orodc conf domains set <list>    # Set domains list (non-interactive)
+orodc conf url                   # Configure URL (interactive)
+orodc conf url <url>             # Set URL (non-interactive)
+
+# Cache management
+orodc cache clear                # Clear cache
+orodc cache warmup               # Warm up cache
+
+# Platform operations
+orodc platform-update            # Update platform
+orodc purge                      # Complete cleanup
+orodc config-refresh             # Refresh configuration
+
+# Development tools
+orodc ssh                        # SSH into container
+orodc php <args>                 # Run PHP commands
+orodc composer <cmd>             # Run Composer
+```
+
+### 🎮 Interactive Menu
+
+OroDC provides an interactive menu for easy access to all commands:
+
+```bash
+# Launch interactive menu (runs automatically when no arguments provided)
+orodc
+
+# Or explicitly
+orodc menu
+```
+
+**Menu Options:**
+- **Environment Management:**
+  - List all environments
+  - Initialize environment
+  - Start/Stop/Delete environment
+  - Image build
+
+- **Configuration:**
+  - Add/Manage domains
+  - Configure application URL
+
+- **Database:**
+  - Export database
+  - Import database
+
+- **Maintenance:**
+  - Clear cache
+  - Platform update
+  - Run doctor (show ps)
+  - Connect via SSH/CLI
+
+- **Proxy:**
+  - Start/Stop proxy
+
+- **Installation:**
+  - Install with/without demo data
+
+**Universal Commands:**
+All menu options correspond to CLI commands, working in both interactive and non-interactive modes:
+
+```bash
+# Interactive mode (shows prompts)
+orodc list                       # Interactive environment selection
+orodc conf domains               # Interactive domain management
+orodc conf url                   # Interactive URL configuration
+
+# Non-interactive mode (for scripts)
+orodc list table                 # Table output
+orodc list json                  # JSON output
+orodc conf domains add api       # Add domain directly
+orodc conf domains remove api    # Remove domain directly
+orodc conf url https://example.com # Set URL directly
+```
+
+**Exit Codes:**
+All commands return proper exit codes:
+- `0` - Success
+- `1` - Error
+- `2` - Special case (e.g., environment switch in `list` command)
+
+Exit codes are displayed in interactive menu and can be used in scripts:
+```bash
+if orodc conf domains add api; then
+  echo "Domain added successfully"
+else
+  echo "Failed to add domain (exit code: $?)"
+fi
 ```
 
 ### 🎯 Smart PHP Commands & Flags
@@ -706,19 +871,49 @@ OroDC automatically processes hostnames for maximum convenience:
 
 ### 📝 Configuration Methods
 
-#### Method 1: Environment Variable
+#### Method 1: Interactive Command (Recommended)
+```bash
+# Interactive mode - shows current domains and allows adding/removing
+orodc conf domains
+
+# Or use the interactive menu
+orodc
+# Select: 7) Add/Manage domains
+```
+
+#### Method 2: Non-Interactive Commands
+```bash
+# List current domains
+orodc conf domains list
+
+# Add domain
+orodc conf domains add api
+orodc conf domains add admin
+orodc conf domains add shop
+
+# Remove domain
+orodc conf domains remove api
+
+# Set multiple domains at once
+orodc conf domains set "api,admin,shop"
+
+# Then restart environment
+orodc up -d
+```
+
+#### Method 3: Environment Variable
 ```bash
 export DC_ORO_EXTRA_HOSTS="api,admin,shop"
 orodc up -d
 ```
 
-#### Method 2: .env.orodc File
+#### Method 4: .env.orodc File
 ```bash
 echo 'DC_ORO_EXTRA_HOSTS=api,admin,shop' >> .env.orodc
 orodc up -d
 ```
 
-#### Method 3: Project-specific Configuration
+#### Method 5: Project-specific Configuration
 ```bash
 # In your project directory
 echo 'DC_ORO_EXTRA_HOSTS=api,admin,shop.local' > .env.orodc
@@ -780,6 +975,49 @@ unset DC_ORO_EXTRA_HOSTS
 orodc down && orodc up -d
 ```
 
+### 🔗 Application URL Configuration
+
+OroDC allows you to configure the application URL for proper routing and access:
+
+```bash
+# Interactive mode (recommended)
+orodc conf url
+
+# Or use the interactive menu
+orodc
+# Select: 8) Configure application URL
+```
+
+**Non-Interactive Mode:**
+```bash
+# Show current URL
+orodc conf url
+
+# Set new URL
+orodc conf url https://myproject.local
+orodc conf url http://localhost:30280
+
+# URL must start with http:// or https://
+```
+
+**Configuration Methods:**
+```bash
+# Method 1: Interactive command
+orodc conf url
+
+# Method 2: Environment variable
+export DC_ORO_URL=https://myproject.local
+orodc up -d
+
+# Method 3: .env.orodc file
+echo 'DC_ORO_URL=https://myproject.local' >> .env.orodc
+orodc up -d
+```
+
+**Default URL:**
+- If not configured, defaults to: `https://${DC_ORO_NAME}.docker.local`
+- Example: If `DC_ORO_NAME=myproject`, default URL is `https://myproject.docker.local`
+
 ## ⚙️ Environment Variables
 
 ### 🔧 Complete Environment Variables Reference
@@ -789,6 +1027,9 @@ orodc down && orodc up -d
 # Project identity
 DC_ORO_NAME=unnamed                # Project name (default: unnamed)
 DC_ORO_PORT_PREFIX=302             # Port prefix (302 → 30280, 30243, etc.)
+
+# Application URL
+DC_ORO_URL=https://myproject.docker.local  # Application URL (default: https://${DC_ORO_NAME}.docker.local)
 
 # Multiple hosts configuration
 DC_ORO_EXTRA_HOSTS=api,admin,shop  # Additional hostnames (comma-separated)

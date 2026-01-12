@@ -518,6 +518,106 @@ echo "✅ Installation completed"
 - Always prefer `~/oroplatform` for consistent testing
 - Refer to [LOCAL-TESTING.md](LOCAL-TESTING.md) for detailed methods
 
+## Spinner Mechanism (CRITICAL)
+
+**When implementing or modifying ANY long-running command:**
+
+- **MUST** use `run_with_spinner` function from `lib/ui.sh`
+- **MUST** use the same pattern as start containers (`libexec/orodc/lib/docker-utils.sh`, line 144)
+- **MUST** NOT redirect stderr when using `run_with_spinner` (spinner writes to stderr)
+- **MUST** handle errors appropriately:
+  - **Critical operations**: `run_with_spinner "Message" "$cmd" || exit $?`
+  - **Non-critical operations**: Check exit code, show warning instead of error
+
+**Standard Pattern:**
+```bash
+# Critical operation (like start containers)
+run_with_spinner "Operation message" "$command" || exit $?
+
+# Non-critical operation (errors as warnings)
+if ! run_with_spinner "Operation message" "$command"; then
+  msg_warning "Operation completed with warnings (see log above for details)"
+fi
+```
+
+**Key Rules:**
+- ✅ ALWAYS use `run_with_spinner` for long-running operations
+- ✅ Use same pattern as start containers everywhere
+- ✅ Let `run_with_spinner` handle logging automatically
+- ❌ NEVER redirect stderr from `run_with_spinner` (breaks spinner)
+- ❌ NEVER use `show_spinner` directly (use `run_with_spinner` wrapper)
+- ❌ NEVER capture stderr to suppress errors (spinner needs stderr)
+
+**Implementation Reference:**
+- Core function: `libexec/orodc/lib/ui.sh` (`run_with_spinner`, lines 123-190)
+- Example (critical): `libexec/orodc/lib/docker-utils.sh` (line 144)
+- Example (warnings): `libexec/orodc/cache.sh` (lines 26-30)
+
+## Installation Command Behavior
+**When implementing or modifying `orodc install` command:**
+
+- **MUST** prompt user for confirmation before dropping existing database
+- **MUST** use `confirm_yes_no` function from `lib/ui.sh`
+- **MUST** show database name in confirmation prompt: `"Drop existing database '<name>' before installation?"`
+- **MUST** use `database-cli` container for database operations
+- **MUST** support both PostgreSQL and MySQL/MariaDB:
+  - PostgreSQL: Connect to `postgres` system database, then `DROP DATABASE IF EXISTS`
+  - MySQL: Execute `DROP DATABASE IF EXISTS` directly
+- **MUST** use `IF EXISTS` clause to prevent errors if database doesn't exist
+- **MUST** continue installation even if user declines database drop
+- **MUST** use `run_with_spinner` for database drop operation with progress indicator
+
+**Example implementation:**
+```bash
+if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
+  db_name="${DC_ORO_DATABASE_DBNAME:-app}"
+  if confirm_yes_no "Drop existing database '${db_name}' before installation?"; then
+    # Drop database using database-cli container
+    # PostgreSQL: psql -d postgres -c "DROP DATABASE IF EXISTS ..."
+    # MySQL: mysql -e "DROP DATABASE IF EXISTS ..."
+  fi
+fi
+```
+
+## Database and Service Access Rules (CRITICAL)
+
+**When implementing or modifying ANY code that interacts with databases or services:**
+
+- **MUST** use PHP or Node.js scripts for ALL database/service operations
+- **MUST** use PHP PDO for database operations (PostgreSQL, MySQL/MariaDB)
+- **MUST** use PHP/Node.js for service checks (Redis, Elasticsearch, RabbitMQ, etc.)
+- **MUST NOT** use direct command-line tools (psql, mysql, redis-cli, etc.) for checks or operations
+- **MUST NOT** rely on system binaries being available in containers
+
+**Why this rule exists:**
+- PHP and Node.js are guaranteed to be available in CLI/FPM containers
+- Database CLI tools (psql, mysql) may not be installed in all containers
+- Consistent approach across all service checks and operations
+- Better error handling and cross-platform compatibility
+
+**Examples:**
+
+```bash
+# ✅ CORRECT - Use PHP for database checks
+php /tmp/db-check.php connection
+php /tmp/db-check.php version
+php /tmp/db-check.php list
+php /tmp/db-check.php exists
+
+# ✅ CORRECT - Use PHP PDO for database operations
+php -r "try { \$pdo = new PDO(...); ... } catch (PDOException \$e) { ... }"
+
+# ❌ WRONG - Direct command-line tools
+psql -h database -U app -d postgres -c "SELECT version();"
+mysql -h database -u app -e "SHOW DATABASES;"
+redis-cli -h redis ping
+```
+
+**Exception:** Only use direct CLI tools when:
+- User explicitly requests it (e.g., `orodc database psql` command)
+- It's a convenience wrapper that calls PHP/Node.js internally
+- It's for interactive user sessions, not automated checks
+
 ---
 
 # 📚 **DOCUMENTATION REFERENCES**
@@ -530,6 +630,7 @@ echo "✅ Installation completed"
 **For users and development info:**
 - [DEVELOPMENT.md](DEVELOPMENT.md) - Commands, workflows, troubleshooting
 - [openspec/project.md](openspec/project.md) - Architecture, context, tech stack
+- [openspec/changes/refactor-cli-modular-architecture/design.md](openspec/changes/refactor-cli-modular-architecture/design.md) - CLI modular architecture, file structure, and services
 - [LOCAL-TESTING.md](LOCAL-TESTING.md) - Testing methods and procedures
 
 **Always refer users to appropriate documentation instead of repeating content in responses.**

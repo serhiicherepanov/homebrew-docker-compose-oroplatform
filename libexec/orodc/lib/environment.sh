@@ -417,6 +417,8 @@ initialize_environment() {
   fi
 
   export DIR=$("$BREW_BIN" --prefix docker-compose-oroplatform)/share/docker-compose-oroplatform
+  debug_log "initialize_environment: STEP 1 - DIR set to: ${DIR}"
+  debug_log "initialize_environment: STEP 1 - SCRIPT_DIR=${SCRIPT_DIR:-not set}"
 
   # Try to get rsync from Homebrew, fallback to system rsync
   RSYNC_BIN="$("$BREW_BIN" --prefix rsync)/bin/rsync"
@@ -720,16 +722,47 @@ initialize_environment() {
 
     # Set port prefix
     export DC_ORO_PORT_PREFIX=${DC_ORO_PORT_PREFIX:-"301"}
+    debug_log "initialize_environment: STEP 2 - DC_ORO_PORT_PREFIX=${DC_ORO_PORT_PREFIX}"
 
     # Build Traefik rule
     build_traefik_rule
+    debug_log "initialize_environment: STEP 3 - Traefik rule built"
 
     # Find and export ports - MUST be called to set port variables
+    debug_log "initialize_environment: STEP 4 - Before find_and_export_ports"
+    debug_log "initialize_environment: STEP 4 - DC_ORO_NAME=${DC_ORO_NAME:-not set}, DC_ORO_CONFIG_DIR=${DC_ORO_CONFIG_DIR:-not set}"
+    debug_log "initialize_environment: STEP 4 - SCRIPT_DIR=${SCRIPT_DIR:-not set}, DIR=${DIR:-not set}"
+    
+    # Check if orodc-find_free_port exists before calling
+    local find_port_check=""
+    if command -v orodc-find_free_port >/dev/null 2>&1; then
+      find_port_check=$(command -v orodc-find_free_port)
+      debug_log "initialize_environment: STEP 4 - orodc-find_free_port found in PATH: $find_port_check"
+    elif [[ -n "${SCRIPT_DIR:-}" ]] && [[ -x "${SCRIPT_DIR}/orodc-find_free_port" ]]; then
+      find_port_check="${SCRIPT_DIR}/orodc-find_free_port"
+      debug_log "initialize_environment: STEP 4 - orodc-find_free_port found via SCRIPT_DIR: $find_port_check"
+    elif [[ -n "${DIR:-}" ]]; then
+      local prefix_dir="$(dirname "$(dirname "$DIR")")"
+      local candidate="${prefix_dir}/libexec/orodc-find_free_port"
+      debug_log "initialize_environment: STEP 4 - checking DIR-based path: $candidate"
+      if [[ -x "$candidate" ]]; then
+        find_port_check="$candidate"
+        debug_log "initialize_environment: STEP 4 - orodc-find_free_port found via DIR: $find_port_check"
+      else
+        debug_log "initialize_environment: STEP 4 - DIR-based path not executable or not found"
+      fi
+    fi
+    
+    if [[ -z "$find_port_check" ]]; then
+      debug_log "initialize_environment: STEP 4 - WARNING: orodc-find_free_port not found before calling find_and_export_ports"
+    fi
+    
     if [[ -n "${DC_ORO_NAME:-}" ]] && [[ -n "${DC_ORO_CONFIG_DIR:-}" ]]; then
       find_and_export_ports "${DC_ORO_NAME}" "${DC_ORO_CONFIG_DIR}"
-      debug_log "initialize_environment: ports set - MQ=${DC_ORO_PORT_MQ:-not set}, SEARCH=${DC_ORO_PORT_SEARCH:-not set}"
+      debug_log "initialize_environment: STEP 5 - After find_and_export_ports"
+      debug_log "initialize_environment: STEP 5 - ports set - MQ=${DC_ORO_PORT_MQ:-not set}, SEARCH=${DC_ORO_PORT_SEARCH:-not set}, MAIL=${DC_ORO_PORT_MAIL_WEBGUI:-not set}"
     else
-      debug_log "initialize_environment: skipping port allocation - DC_ORO_NAME=${DC_ORO_NAME:-not set}, DC_ORO_CONFIG_DIR=${DC_ORO_CONFIG_DIR:-not set}"
+      debug_log "initialize_environment: STEP 5 - skipping port allocation - DC_ORO_NAME=${DC_ORO_NAME:-not set}, DC_ORO_CONFIG_DIR=${DC_ORO_CONFIG_DIR:-not set}"
     fi
   fi
 

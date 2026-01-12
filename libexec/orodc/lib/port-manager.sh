@@ -8,6 +8,10 @@ find_and_export_ports() {
   local project_name="$1"
   local config_dir="$2"
 
+  debug_log "find_and_export_ports: START - project=${project_name}, config_dir=${config_dir}"
+  debug_log "find_and_export_ports: START - DC_ORO_PORT_PREFIX=${DC_ORO_PORT_PREFIX:-not set}"
+  debug_log "find_and_export_ports: START - SCRIPT_DIR=${SCRIPT_DIR:-not set}, DIR=${DIR:-not set}"
+
   # Always set ports with prefix first (base ports)
   export DC_ORO_PORT_NGINX="${DC_ORO_PORT_NGINX:-${DC_ORO_PORT_PREFIX}80}"
   export DC_ORO_PORT_XHGUI="${DC_ORO_PORT_XHGUI:-${DC_ORO_PORT_PREFIX}81}"
@@ -18,6 +22,7 @@ find_and_export_ports() {
   export DC_ORO_PORT_REDIS="${DC_ORO_PORT_REDIS:-${DC_ORO_PORT_PREFIX}79}"
   export DC_ORO_PORT_MAIL_WEBGUI="${DC_ORO_PORT_MAIL_WEBGUI:-${DC_ORO_PORT_PREFIX}25}"
   export DC_ORO_PORT_SSH="${DC_ORO_PORT_SSH:-${DC_ORO_PORT_PREFIX}22}"
+  debug_log "find_and_export_ports: STEP 1 - Base ports set with prefix"
 
   # Find orodc-find_free_port utility
   # It's installed in libexec/ directory (same level as libexec/orodc/)
@@ -25,31 +30,56 @@ find_and_export_ports() {
   local find_port_bin=""
   
   # Try PATH first
+  debug_log "find_and_export_ports: STEP 2 - Checking PATH for orodc-find_free_port"
   if command -v orodc-find_free_port >/dev/null 2>&1; then
     find_port_bin=$(command -v orodc-find_free_port)
-    debug_log "find_and_export_ports: found orodc-find_free_port in PATH: $find_port_bin"
+    debug_log "find_and_export_ports: STEP 2 - FOUND in PATH: $find_port_bin"
   else
+    debug_log "find_and_export_ports: STEP 2 - NOT found in PATH"
     # Try using SCRIPT_DIR from bin/orodc (points to libexec/)
     # This is exported by bin/orodc before sourcing libraries
-    if [[ -n "${SCRIPT_DIR:-}" ]] && [[ -x "${SCRIPT_DIR}/orodc-find_free_port" ]]; then
-      find_port_bin="${SCRIPT_DIR}/orodc-find_free_port"
-      debug_log "find_and_export_ports: found orodc-find_free_port via SCRIPT_DIR: $find_port_bin"
+    debug_log "find_and_export_ports: STEP 3 - Checking SCRIPT_DIR=${SCRIPT_DIR:-not set}"
+    if [[ -n "${SCRIPT_DIR:-}" ]]; then
+      debug_log "find_and_export_ports: STEP 3 - SCRIPT_DIR exists, checking ${SCRIPT_DIR}/orodc-find_free_port"
+      if [[ -f "${SCRIPT_DIR}/orodc-find_free_port" ]]; then
+        debug_log "find_and_export_ports: STEP 3 - File exists, checking executable bit"
+        if [[ -x "${SCRIPT_DIR}/orodc-find_free_port" ]]; then
+          find_port_bin="${SCRIPT_DIR}/orodc-find_free_port"
+          debug_log "find_and_export_ports: STEP 3 - FOUND via SCRIPT_DIR: $find_port_bin"
+        else
+          debug_log "find_and_export_ports: STEP 3 - File exists but not executable"
+        fi
+      else
+        debug_log "find_and_export_ports: STEP 3 - File does not exist at ${SCRIPT_DIR}/orodc-find_free_port"
+      fi
     else
+      debug_log "find_and_export_ports: STEP 3 - SCRIPT_DIR not set"
+    fi
+    
+    if [[ -z "$find_port_bin" ]]; then
       # Try using DIR variable from environment.sh (points to share/docker-compose-oroplatform)
       # DIR is at <prefix>/share/docker-compose-oroplatform, libexec is at <prefix>/libexec/
+      debug_log "find_and_export_ports: STEP 4 - Checking DIR=${DIR:-not set}"
       if [[ -n "${DIR:-}" ]]; then
         # DIR = <prefix>/share/docker-compose-oroplatform
         # libexec = <prefix>/libexec/
         # So: $(dirname "$DIR") = <prefix>/share, then ../libexec/ = <prefix>/libexec/
         local prefix_dir="$(dirname "$(dirname "$DIR")")"
         local candidate="${prefix_dir}/libexec/orodc-find_free_port"
-        debug_log "find_and_export_ports: checking DIR-based path: $candidate (DIR=${DIR}, prefix_dir=${prefix_dir})"
-        if [[ -x "$candidate" ]]; then
-          find_port_bin="$candidate"
-          debug_log "find_and_export_ports: found orodc-find_free_port via DIR: $find_port_bin"
+        debug_log "find_and_export_ports: STEP 4 - DIR-based candidate: $candidate (prefix_dir=${prefix_dir})"
+        if [[ -f "$candidate" ]]; then
+          debug_log "find_and_export_ports: STEP 4 - File exists, checking executable bit"
+          if [[ -x "$candidate" ]]; then
+            find_port_bin="$candidate"
+            debug_log "find_and_export_ports: STEP 4 - FOUND via DIR: $find_port_bin"
+          else
+            debug_log "find_and_export_ports: STEP 4 - File exists but not executable"
+          fi
         else
-          debug_log "find_and_export_ports: $candidate not found or not executable"
+          debug_log "find_and_export_ports: STEP 4 - File does not exist at $candidate"
         fi
+      else
+        debug_log "find_and_export_ports: STEP 4 - DIR not set"
       fi
       
       # Fallback: try relative to current script (for development/testing)
@@ -71,13 +101,15 @@ find_and_export_ports() {
   fi
 
   if [[ -z "$find_port_bin" ]] || [[ ! -x "$find_port_bin" ]]; then
-    debug_log "find_and_export_ports: orodc-find_free_port not found (checked PATH, DIR=${DIR:-not set}, script path), using prefix-based ports"
+    debug_log "find_and_export_ports: orodc-find_free_port not found (checked PATH, SCRIPT_DIR=${SCRIPT_DIR:-not set}, DIR=${DIR:-not set}), using prefix-based ports"
+    debug_log "find_and_export_ports: SCRIPT_DIR check: ${SCRIPT_DIR:-not set}, file exists: $([[ -n "${SCRIPT_DIR:-}" ]] && [[ -f "${SCRIPT_DIR}/orodc-find_free_port" ]] && echo "yes" || echo "no")"
     return 0
   fi
 
   debug_log "find_and_export_ports: project=${project_name}, config_dir=${config_dir}, prefix=${DC_ORO_PORT_PREFIX}, bin=${find_port_bin}"
 
   # Use batch port resolution for better performance
+  debug_log "find_and_export_ports: calling orodc-find_free_port --batch"
   BATCH_PORTS=$("$find_port_bin" --batch "${project_name}" "$config_dir" \
     nginx "${DC_ORO_PORT_PREFIX}80" \
     xhgui "${DC_ORO_PORT_PREFIX}81" \
@@ -90,6 +122,7 @@ find_and_export_ports() {
     ssh "${DC_ORO_PORT_PREFIX}22" 2>&1)
   
   local exit_code=$?
+  debug_log "find_and_export_ports: orodc-find_free_port exit_code=$exit_code"
   
   if [[ $exit_code -ne 0 ]] || [[ -z "$BATCH_PORTS" ]]; then
     debug_log "find_and_export_ports: orodc-find_free_port failed, using prefix-based ports"

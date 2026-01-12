@@ -2,7 +2,7 @@ class DockerComposeOroplatform < Formula
   desc "CLI tool to run ORO applications locally or on a server"
   homepage "https://github.com/digitalspacestdio/homebrew-docker-compose-oroplatform"
   url "file:///dev/null"
-  version "0.15.11"
+  version "1.0.0"
   sha256 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
   def self.aliases
@@ -40,7 +40,7 @@ class DockerComposeOroplatform < Formula
 
     # Create bin symlink to the main dispatcher (no wrapper, direct symlink)
     bin.install_symlink libexec/"orodc-main" => "orodc"
-    bin.install_symlink libexec/"orodc-find_free_port" => "orodc-find_free_port"
+    bin.install_symlink libexec/"orodc-find_qfree_port" => "orodc-find_free_port"
 
     # Copy compose directory recursively
     pkgshare.mkpath

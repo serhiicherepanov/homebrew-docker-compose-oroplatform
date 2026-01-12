@@ -29,7 +29,17 @@ if [[ "$1" == "version" ]]; then
   FORMULA_FILE=""
 
   # Use find to locate Formula file, starting from script directory and going up
+  # First try relative to script directory (for development)
   FORMULA_FILE=$(find "$SCRIPT_DIR" -name "docker-compose-oroplatform.rb" -type f 2>/dev/null | head -1)
+
+  # If not found, try going up from script directory (for tap development)
+  if [[ -z "$FORMULA_FILE" ]]; then
+    SEARCH_DIR="$SCRIPT_DIR"
+    while [[ "$SEARCH_DIR" != "/" ]] && [[ -z "$FORMULA_FILE" ]]; do
+      FORMULA_FILE=$(find "$SEARCH_DIR" -maxdepth 2 -name "docker-compose-oroplatform.rb" -type f 2>/dev/null | head -1)
+      SEARCH_DIR=$(dirname "$SEARCH_DIR")
+    done
+  fi
 
   # If not found relative to script, try brew repository
   if [[ -z "$FORMULA_FILE" ]] && command -v brew >/dev/null 2>&1; then
@@ -48,7 +58,7 @@ if [[ "$1" == "version" ]]; then
   if [[ -n "$FORMULA_VERSION" ]]; then
     echo "orodc version $FORMULA_VERSION"
   else
-    echo "orodc version 0.8.3 (fallback)"
+    echo "orodc version unknown (formula file not found)"
   fi
   exit 0
 fi

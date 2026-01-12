@@ -124,7 +124,7 @@ fi
 # Initialize environment for most commands
 # Skip for: help, version, proxy, image (these don't require project)
 case "$1" in
-  help|man|version|proxy|image)
+  help|man|version|proxy|image|docker-build)
     # Skip initialization for these commands
     ;;
   *)
@@ -349,6 +349,12 @@ case "$1" in
         exit 1
         ;;
     esac
+    ;;
+
+  # Docker build command - non-interactive image builder (not in menu)
+  docker-build)
+    shift
+    exec "${LIBEXEC_DIR}/docker-build.sh" "$@"
     ;;
 
   # Single-file commands

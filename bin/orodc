@@ -1452,6 +1452,12 @@ show_interactive_menu() {
     fi
   fi
   
+  # Check if current project is Oro Platform based
+  local is_oro=false
+  if is_oro_project; then
+    is_oro=true
+  fi
+  
   clear
   echo -e "\033[1;34m========================================\033[0m" >&2
   echo -e "\033[1;34m    OroDC Interactive Menu\033[0m" >&2
@@ -1482,13 +1488,24 @@ show_interactive_menu() {
     echo "" >&2
     printf "  \033[1;35m%-30s\033[0m  \033[1;32m%-30s\033[0m\n" "Database:" "Maintenance:" >&2
     printf "  %-30s  %-30s\n" "  9)  Export database" "  11) Clear cache" >&2
-    printf "  %-30s  %-30s\n" "  10) Import database" "  12) Platform update" >&2
+    if [[ "$is_oro" == "true" ]]; then
+      printf "  %-30s  %-30s\n" "  10) Import database" "  12) Platform update" >&2
+    else
+      printf "  %-30s  %-30s\n" "  10) Import database" "" >&2
+    fi
     printf "  %-30s  %-30s\n" "" "  13) Run doctor" >&2
     echo "" >&2
-    printf "  \033[1;37m%-30s\033[0m  \033[1;31m%-30s\033[0m\n" "Other:" "Installation:" >&2
-    printf "  %-30s  %-30s\n" "  14) Image build" "  17) Install with demo" >&2
-    printf "  %-30s  %-30s\n" "  15) Start proxy" "  18) Install without demo" >&2
-    printf "  %-30s  %-30s\n" "  16) Stop proxy" "" >&2
+    if [[ "$is_oro" == "true" ]]; then
+      printf "  \033[1;37m%-30s\033[0m  \033[1;31m%-30s\033[0m\n" "Other:" "Installation (Oro):" >&2
+      printf "  %-30s  %-30s\n" "  14) Image build" "  17) Install with demo" >&2
+      printf "  %-30s  %-30s\n" "  15) Start proxy" "  18) Install without demo" >&2
+      printf "  %-30s  %-30s\n" "  16) Stop proxy" "" >&2
+    else
+      printf "  \033[1;37m%-30s\033[0m\n" "Other:" >&2
+      printf "  %-30s\n" "  14) Image build" >&2
+      printf "  %-30s\n" "  15) Start proxy" >&2
+      printf "  %-30s\n" "  16) Stop proxy" >&2
+    fi
   else
     # Single column layout (original)
     echo -e "\033[1;36mEnvironment Management:\033[0m" >&2
@@ -1509,17 +1526,21 @@ show_interactive_menu() {
     echo "" >&2
     echo -e "\033[1;32mMaintenance:\033[0m" >&2
     echo "  11) Clear cache" >&2
-    echo "  12) Platform update" >&2
+    if [[ "$is_oro" == "true" ]]; then
+      echo "  12) Platform update" >&2
+    fi
     echo "  13) Run doctor (show ps)" >&2
     echo "" >&2
     echo -e "\033[1;37mOther:\033[0m" >&2
     echo "  14) Image build" >&2
     echo "  15) Start proxy" >&2
     echo "  16) Stop proxy" >&2
-    echo "" >&2
-    echo -e "\033[1;31mInstallation:\033[0m" >&2
-    echo "  17) Install with demo data" >&2
-    echo "  18) Install without demo data" >&2
+    if [[ "$is_oro" == "true" ]]; then
+      echo "" >&2
+      echo -e "\033[1;31mInstallation (Oro):\033[0m" >&2
+      echo "  17) Install with demo data" >&2
+      echo "  18) Install without demo data" >&2
+    fi
   fi
   
   echo "" >&2
@@ -1547,8 +1568,17 @@ show_interactive_menu() {
   else
     echo -e "Current Directory: $display_dir" >&2
   fi
+  if [[ "$is_oro" == "true" ]]; then
+    echo -e "Project Type: \033[1;32mOro Platform\033[0m" >&2
+  else
+    echo -e "Project Type: \033[1;33mGeneric PHP/Symfony\033[0m" >&2
+  fi
   echo "" >&2
-  echo -n "Enter option [1-18] or 'q' to quit: " >&2
+  if [[ "$is_oro" == "true" ]]; then
+    echo -n "Enter option [1-18] or 'q' to quit: " >&2
+  else
+    echo -n "Enter option [1-16] or 'q' to quit: " >&2
+  fi
   read -r choice
   
   case "$choice" in
@@ -1706,6 +1736,14 @@ show_interactive_menu() {
         show_interactive_menu
         exit
       fi
+      if ! is_oro_project; then
+        msg_warning "Platform update is only available for Oro Platform projects"
+        echo "" >&2
+        echo -n "Press Enter to continue..." >&2
+        read -r
+        show_interactive_menu
+        exit
+      fi
       platform_update_interactive
       echo "" >&2
       if confirm_yes_no "Return to menu?" "yes"; then
@@ -1799,6 +1837,14 @@ show_interactive_menu() {
       ;;
     17)
       echo "" >&2
+      if ! is_oro_project; then
+        msg_warning "Oro installation is only available for Oro Platform projects"
+        echo "" >&2
+        echo -n "Press Enter to continue..." >&2
+        read -r
+        show_interactive_menu
+        exit
+      fi
       msg_warning "WARNING: This will PURGE all existing data (database, cache, volumes) and reinstall!"
       echo "" >&2
       if confirm_yes_no "Install Application WITH demo data? (purge + install)" "no"; then
@@ -1816,6 +1862,14 @@ show_interactive_menu() {
       ;;
     18)
       echo "" >&2
+      if ! is_oro_project; then
+        msg_warning "Oro installation is only available for Oro Platform projects"
+        echo "" >&2
+        echo -n "Press Enter to continue..." >&2
+        read -r
+        show_interactive_menu
+        exit
+      fi
       msg_warning "WARNING: This will PURGE all existing data (database, cache, volumes) and reinstall!"
       echo "" >&2
       if confirm_yes_no "Install Application WITHOUT demo data? (purge + install)" "no"; then
@@ -2588,6 +2642,254 @@ if [[ "$temp_first_non_flag_arg" == "proxy" ]]; then
       msg_info "  orodc proxy down          - Stop proxy (keeps volumes)"
       msg_info "  orodc proxy purge         - Remove proxy and volumes"
       msg_info "  orodc proxy install-certs - Install CA certificates to system"
+      msg_info ""
+      exit 1
+      ;;
+  esac
+fi
+
+# Handle docker-build commands early - they don't require project initialization
+if [[ "$temp_first_non_flag_arg" == "docker-build" ]]; then
+  # Initialize minimal dependencies
+  DOCKER_BIN=$(resolve_bin "docker" "Docker is required. Install from https://docs.docker.com/get-docker/")
+  
+  # Get OroDC install directory
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  
+  # Get Homebrew prefix dynamically
+  BREW_PREFIX="$(brew --prefix 2>/dev/null || echo "/home/linuxbrew/.linuxbrew")"
+  
+  # Find compose directory
+  if [[ -d "${BREW_PREFIX}/Homebrew/Library/Taps/digitalspacestdio/homebrew-docker-compose-oroplatform/compose" ]]; then
+    DC_ORO_COMPOSE_DIR="${BREW_PREFIX}/Homebrew/Library/Taps/digitalspacestdio/homebrew-docker-compose-oroplatform/compose"
+  elif [[ -d "${BREW_PREFIX}/share/docker-compose-oroplatform/compose" ]]; then
+    DC_ORO_COMPOSE_DIR="${BREW_PREFIX}/share/docker-compose-oroplatform/compose"
+  elif [[ -d "$SCRIPT_DIR/../compose" ]]; then
+    DC_ORO_COMPOSE_DIR="$SCRIPT_DIR/../compose"
+  elif [[ -d "$SCRIPT_DIR/../share/docker-compose-oroplatform/compose" ]]; then
+    DC_ORO_COMPOSE_DIR="$SCRIPT_DIR/../share/docker-compose-oroplatform/compose"
+  else
+    msg_error "Could not find OroDC compose directory"
+    exit 1
+  fi
+  
+  DOCKER_DIR="${DC_ORO_COMPOSE_DIR}/docker"
+  
+  # Get subcommand
+  BUILD_TARGET="${2:-}"
+  
+  # Parse global flags
+  NO_CACHE_FLAG=""
+  PUSH_IMAGES=false
+  PG_VERSION=""
+  
+  shift_count=2
+  for arg in "${@:3}"; do
+    case "$arg" in
+      --no-cache) NO_CACHE_FLAG="--no-cache" ;;
+      --push) PUSH_IMAGES=true ;;
+      --version=*) PG_VERSION="${arg#*=}" ;;
+      *) 
+        # Could be pg version without flag
+        if [[ -z "$PG_VERSION" && "$arg" =~ ^[0-9]+\.[0-9]+ ]]; then
+          PG_VERSION="$arg"
+        fi
+        ;;
+    esac
+  done
+  
+  # Helper function to build single image
+  build_image() {
+    local dockerfile="$1"
+    local context="$2"
+    local tag="$3"
+    local name="$4"
+    shift 4
+    local build_args=("$@")
+    
+    if [[ ! -f "$dockerfile" ]]; then
+      msg_error "Dockerfile not found: $dockerfile"
+      return 1
+    fi
+    
+    msg_info "Building ${name}..."
+    msg_info "  Tag: ${tag}"
+    
+    local build_cmd="${DOCKER_BIN} build ${NO_CACHE_FLAG}"
+    for arg in "${build_args[@]}"; do
+      build_cmd+=" --build-arg ${arg}"
+    done
+    build_cmd+=" -f ${dockerfile} -t ${tag} ${context}"
+    
+    BUILD_START=$(date +%s)
+    if eval "$build_cmd"; then
+      BUILD_END=$(date +%s)
+      BUILD_DURATION=$((BUILD_END - BUILD_START))
+      msg_ok "${name} built in ${BUILD_DURATION}s"
+      
+      if [[ "$PUSH_IMAGES" == "true" ]]; then
+        msg_info "Pushing ${tag}..."
+        if ${DOCKER_BIN} push "${tag}"; then
+          msg_ok "Pushed ${tag}"
+        else
+          msg_warning "Failed to push ${tag}"
+        fi
+      fi
+      return 0
+    else
+      msg_error "Failed to build ${name}"
+      return 1
+    fi
+  }
+  
+  case "$BUILD_TARGET" in
+    list|"")
+      msg_header "OroDC Docker Images"
+      msg_info ""
+      msg_info "Available images to build:"
+      msg_info ""
+      msg_info "  nginx     - Nginx web server (orodc-nginx:latest)"
+      msg_info "  mail      - Mailpit mail catcher (orodc-mail:latest)"
+      msg_info "  pgsql     - PostgreSQL database (orodc-pgsql:VERSION)"
+      msg_info "              Versions: 15.1, 16.6, 17.4"
+      msg_info "  all       - Build all images above"
+      msg_info ""
+      msg_info "Usage:"
+      msg_info "  orodc docker-build <image> [options]"
+      msg_info ""
+      msg_info "Options:"
+      msg_info "  --no-cache    Build without cache"
+      msg_info "  --push        Push to GHCR after build"
+      msg_info "  --version=X   PostgreSQL version (for pgsql)"
+      msg_info ""
+      msg_info "Examples:"
+      msg_info "  orodc docker-build nginx"
+      msg_info "  orodc docker-build pgsql 17.4"
+      msg_info "  orodc docker-build pgsql --version=16.6"
+      msg_info "  orodc docker-build all --no-cache"
+      msg_info "  orodc docker-build mail --push"
+      msg_info ""
+      msg_info "Note: PHP images use 'orodc image build' (multi-stage interactive)"
+      msg_info ""
+      exit 0
+      ;;
+    
+    nginx)
+      msg_header "Building Nginx Image"
+      build_image \
+        "${DOCKER_DIR}/nginx/Dockerfile" \
+        "${DOCKER_DIR}/nginx/" \
+        "ghcr.io/digitalspacestdio/orodc-nginx:latest" \
+        "Nginx"
+      exit $?
+      ;;
+    
+    mail)
+      msg_header "Building Mailpit Image"
+      build_image \
+        "${DOCKER_DIR}/mail/Dockerfile" \
+        "${DOCKER_DIR}/mail/" \
+        "ghcr.io/digitalspacestdio/orodc-mail:latest" \
+        "Mailpit"
+      exit $?
+      ;;
+    
+    pgsql)
+      msg_header "Building PostgreSQL Image"
+      
+      # Default versions if not specified
+      if [[ -z "$PG_VERSION" ]]; then
+        PG_VERSIONS=("15.1" "16.6" "17.4")
+        msg_info "Building all PostgreSQL versions: ${PG_VERSIONS[*]}"
+      else
+        PG_VERSIONS=("$PG_VERSION")
+      fi
+      
+      FAILED=0
+      for ver in "${PG_VERSIONS[@]}"; do
+        msg_info ""
+        build_image \
+          "${DOCKER_DIR}/pgsql/Dockerfile" \
+          "${DOCKER_DIR}/pgsql/" \
+          "ghcr.io/digitalspacestdio/orodc-pgsql:${ver}" \
+          "PostgreSQL ${ver}" \
+          "PG_VERSION=${ver}" || FAILED=1
+      done
+      
+      exit $FAILED
+      ;;
+    
+    all)
+      msg_header "Building All OroDC Images"
+      msg_info ""
+      
+      BUILT=()
+      FAILED=()
+      
+      # Nginx
+      msg_info "=== Nginx ==="
+      if build_image \
+        "${DOCKER_DIR}/nginx/Dockerfile" \
+        "${DOCKER_DIR}/nginx/" \
+        "ghcr.io/digitalspacestdio/orodc-nginx:latest" \
+        "Nginx"; then
+        BUILT+=("nginx")
+      else
+        FAILED+=("nginx")
+      fi
+      
+      msg_info ""
+      
+      # Mail
+      msg_info "=== Mailpit ==="
+      if build_image \
+        "${DOCKER_DIR}/mail/Dockerfile" \
+        "${DOCKER_DIR}/mail/" \
+        "ghcr.io/digitalspacestdio/orodc-mail:latest" \
+        "Mailpit"; then
+        BUILT+=("mail")
+      else
+        FAILED+=("mail")
+      fi
+      
+      msg_info ""
+      
+      # PostgreSQL (all versions)
+      msg_info "=== PostgreSQL ==="
+      for ver in 15.1 16.6 17.4; do
+        if build_image \
+          "${DOCKER_DIR}/pgsql/Dockerfile" \
+          "${DOCKER_DIR}/pgsql/" \
+          "ghcr.io/digitalspacestdio/orodc-pgsql:${ver}" \
+          "PostgreSQL ${ver}" \
+          "PG_VERSION=${ver}"; then
+          BUILT+=("pgsql:${ver}")
+        else
+          FAILED+=("pgsql:${ver}")
+        fi
+      done
+      
+      # Summary
+      msg_info ""
+      msg_header "Build Summary"
+      
+      if [[ ${#BUILT[@]} -gt 0 ]]; then
+        msg_ok "Built: ${BUILT[*]}"
+      fi
+      
+      if [[ ${#FAILED[@]} -gt 0 ]]; then
+        msg_error "Failed: ${FAILED[*]}"
+        exit 1
+      fi
+      
+      msg_ok "All images built successfully!"
+      exit 0
+      ;;
+    
+    *)
+      msg_error "Unknown image type: ${BUILD_TARGET}"
+      msg_info ""
+      msg_info "Run 'orodc docker-build list' to see available images"
       msg_info ""
       exit 1
       ;;
@@ -3627,6 +3929,11 @@ elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "mariadb" ]] || [[ "${DC_ORO_DATABASE_SCH
   export DC_ORO_DATABASE_PORT=${DC_ORO_DATABASE_PORT:-3306}
   DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-mysql.yml"
 fi
+
+# Include consumer service only for Oro Platform projects
+if is_oro_project && [[ -f "${DC_ORO_CONFIG_DIR}/docker-compose-consumer.yml" ]]; then
+  DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-consumer.yml"
+fi
 if ${DOCKER_COMPOSE_BIN_CMD} ps --services 2>/dev/null | grep database > /dev/null; then
   SERVICE_DATABASE_ID=$(${DOCKER_COMPOSE_BIN_CMD} ps -q database)
   if [[ "" != $SERVICE_DATABASE_ID ]] && ${DOCKER_BIN} inspect -f '{{ .Config.Image }}' "$SERVICE_DATABASE_ID" | grep -q 'busybox'; then
@@ -3639,6 +3946,48 @@ if [[ -f "$DC_ORO_APPDIR/.docker-compose.user.yml" ]]; then
   msg_info "Additional ${DOCKER_BIN} compose config will be used: $DC_ORO_APPDIR/.docker-compose.user.yml"
   DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f $DC_ORO_APPDIR/.docker-compose.user.yml"
 fi
+
+# Detect if project is an Oro Platform-based project
+# Checks composer.json for Oro ecosystem packages
+# Returns 0 (true) if Oro project, 1 (false) otherwise
+# Override with DC_ORO_IS_ORO_PROJECT environment variable (1/true or 0/false)
+is_oro_project() {
+  # Check for explicit override first
+  if [[ -n "${DC_ORO_IS_ORO_PROJECT:-}" ]]; then
+    case "${DC_ORO_IS_ORO_PROJECT,,}" in
+      1|true|yes)
+        return 0
+        ;;
+      0|false|no)
+        return 1
+        ;;
+    esac
+  fi
+  
+  # Auto-detect from composer.json
+  local composer_file="${DC_ORO_APPDIR:-$PWD}/composer.json"
+  if [[ ! -f "$composer_file" ]]; then
+    return 1
+  fi
+  
+  # Check for Oro ecosystem packages in require section
+  # Uses jq if available for reliable JSON parsing
+  if command -v jq >/dev/null 2>&1; then
+    local oro_packages
+    oro_packages=$(jq -r '.require // {} | keys[]' "$composer_file" 2>/dev/null | \
+      grep -E '^(oro/platform|oro/commerce|oro/crm|oro/customer-portal|marello/marello)$' | head -1)
+    if [[ -n "$oro_packages" ]]; then
+      return 0
+    fi
+  else
+    # Fallback: grep-based detection (less reliable but works without jq)
+    if grep -qE '"(oro/platform|oro/commerce|oro/crm|oro/customer-portal|marello/marello)"' "$composer_file" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  
+  return 1
+}
 
 # Auto-detect PHP version from composer.json
 detect_php_version_from_composer() {

@@ -432,8 +432,14 @@ initialize_environment() {
   export DOCKER_COMPOSE_VERSION=$($DOCKER_COMPOSE_BIN_CMD version | grep -E '[0-9]+\.[0-9]+\.[0-9]+' -o | head -1 | awk -F. '{ print $1 }')
 
   # Find project directory
+  # First try to find composer.json (for existing OroPlatform projects)
   if [[ -z "${DC_ORO_APPDIR:-}" ]]; then
     export DC_ORO_APPDIR=$(find-up composer.json)
+  fi
+
+  # If composer.json not found, check for .env.orodc (for projects after init)
+  if [[ -z "${DC_ORO_APPDIR:-}" ]]; then
+    export DC_ORO_APPDIR=$(find-up .env.orodc)
   fi
 
   if [[ -z "${DC_ORO_APPDIR:-}" ]]; then

@@ -421,6 +421,42 @@ version "1.0.0"
 - Emojis in terminal commands or output
 - Shell syntax that isn't zsh compatible
 
+## 🔴 **CRITICAL: Fix Root Cause, Not Symptoms**
+
+**⚡ MANDATORY: Solve the actual problem, not work around it!**
+
+**⛔ NEVER:**
+- ❌ Add fallbacks/workarounds without user request or confirmation
+- ❌ Hide problems with default values or silent failures
+- ❌ Create "safe" code paths that mask real issues
+- ❌ Add error handling that swallows errors instead of fixing them
+
+**✅ ALWAYS:**
+- ✅ Fix the root cause of the problem
+- ✅ Make code fail fast and clearly when something is wrong
+- ✅ Investigate why something doesn't work, not just add a workaround
+- ✅ Ask user for confirmation before adding fallbacks/workarounds
+- ✅ Solve the specific problem the user reported
+
+**Example - WRONG approach:**
+```bash
+# ❌ WRONG: Adding fallback that hides the real problem
+if ! find_and_export_ports; then
+  # Fallback to default ports
+  export DC_ORO_PORT_MQ=15672
+fi
+```
+
+**Example - CORRECT approach:**
+```bash
+# ✅ CORRECT: Fix why find_and_export_ports doesn't work
+# Investigate: why is orodc-find_free_port not found?
+# Fix: ensure it's in PATH or fix the calling code
+find_and_export_ports
+```
+
+**Rule:** If something doesn't work, fix WHY it doesn't work, don't add code to work around it.
+
 ## Ask User For:
 - Operating system
 - Current sync mode

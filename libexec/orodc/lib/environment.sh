@@ -724,9 +724,12 @@ initialize_environment() {
     # Build Traefik rule
     build_traefik_rule
 
-    # Find and export ports
+    # Find and export ports - MUST be called to set port variables
     if [[ -n "${DC_ORO_NAME:-}" ]] && [[ -n "${DC_ORO_CONFIG_DIR:-}" ]]; then
       find_and_export_ports "${DC_ORO_NAME}" "${DC_ORO_CONFIG_DIR}"
+      debug_log "initialize_environment: ports set - MQ=${DC_ORO_PORT_MQ:-not set}, SEARCH=${DC_ORO_PORT_SEARCH:-not set}"
+    else
+      debug_log "initialize_environment: skipping port allocation - DC_ORO_NAME=${DC_ORO_NAME:-not set}, DC_ORO_CONFIG_DIR=${DC_ORO_CONFIG_DIR:-not set}"
     fi
   fi
 

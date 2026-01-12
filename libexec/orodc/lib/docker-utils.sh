@@ -48,8 +48,8 @@ generate_compose_config_if_needed() {
 
   # Generate config file only if it doesn't exist or if it's a management command
   if [[ ! -f "${DC_ORO_CONFIG_DIR}/compose.yml" ]] || [[ "$compose_cmd" =~ ^(up|down|purge|build|pull|push|restart|start|stop|kill|rm|create|ps|doctor)$ ]]; then
-    # Export ORO_MAILER_ENCRYPTION to subprocess (already normalized to tls if needed)
-    DC_ORO_NAME="$DC_ORO_NAME" bash -c "${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} config" > "${DC_ORO_CONFIG_DIR}/compose.yml" 2>/dev/null || true
+    # Generate compose.yml with all environment variables (ports, etc.) available
+    eval "${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} config" > "${DC_ORO_CONFIG_DIR}/compose.yml" 2>/dev/null || true
 
     # Register environment after creating compose.yml
     if [[ -f "${DC_ORO_CONFIG_DIR}/compose.yml" ]] && [[ -n "${DC_ORO_NAME:-}" ]] && [[ -n "${DC_ORO_CONFIG_DIR:-}" ]]; then
@@ -69,20 +69,20 @@ exec_compose_command() {
   # For build command, use spinner
   if [[ "$docker_cmd" == "build" ]]; then
     full_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} ${docker_cmd} ${right_flags[*]} ${right_options[*]} ${docker_services}"
-    DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Building services" "$full_cmd"
+    run_with_spinner "Building services" "$full_cmd"
     return $?
   fi
 
   # For down command, use spinner
   if [[ "$docker_cmd" == "down" ]]; then
     full_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} ${docker_cmd} ${right_flags[*]} ${right_options[*]} ${docker_services}"
-    DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Stopping services" "$full_cmd"
+    run_with_spinner "Stopping services" "$full_cmd"
     return $?
   fi
 
-  # For all other commands, run directly
+  # For all other commands, run directly (variables are already exported)
   full_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} ${docker_cmd} ${right_flags[*]} ${right_options[*]} ${docker_services}"
-  DC_ORO_NAME="$DC_ORO_NAME" bash -c "$full_cmd"
+  eval "$full_cmd"
   return $?
 }
 
@@ -104,7 +104,7 @@ handle_compose_up() {
     # Phase 1: Build images (unless --no-build is specified)
     if [[ "$skip_build" == "false" ]]; then
       build_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} build ${docker_services}"
-      DC_ORO_NAME="$DC_ORO_NAME" bash -c "$build_cmd" || exit $?
+      eval "$build_cmd" || exit $?
     fi
 
     # Phase 2: Start services
@@ -116,7 +116,7 @@ handle_compose_up() {
     done
 
     up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up ${up_flags[*]} ${right_options[*]} ${docker_services}"
-    DC_ORO_NAME="$DC_ORO_NAME" bash -c "$up_cmd" || exit $?
+    eval "$up_cmd" || exit $?
     show_service_urls
     exit 0
   fi
@@ -149,7 +149,7 @@ handle_compose_up() {
   fi
 
   up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up ${up_flags[*]} ${right_options[*]} ${docker_services}"
-  DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Starting services" "$up_cmd" || exit $?
+  run_with_spinner "Starting services" "$up_cmd" || exit $?
 
   # Calculate total up time and save
   up_end_time=$(date +%s)

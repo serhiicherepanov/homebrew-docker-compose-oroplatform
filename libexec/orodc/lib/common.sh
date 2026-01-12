@@ -277,3 +277,44 @@ parse_compose_flags() {
     fi
   done
 }
+
+# Detect if current project is an Oro Platform application
+# Returns 0 (true) if Oro project, 1 (false) otherwise
+# Can be overridden with DC_ORO_IS_ORO_PROJECT env var
+is_oro_project() {
+  # Check for explicit override first
+  if [[ -n "${DC_ORO_IS_ORO_PROJECT:-}" ]]; then
+    case "${DC_ORO_IS_ORO_PROJECT,,}" in
+      1|true|yes)
+        return 0
+        ;;
+      0|false|no)
+        return 1
+        ;;
+    esac
+  fi
+  
+  # Auto-detect from composer.json
+  local composer_file="${DC_ORO_APPDIR:-$PWD}/composer.json"
+  if [[ ! -f "$composer_file" ]]; then
+    return 1
+  fi
+  
+  # Check for Oro ecosystem packages in require section
+  # Uses jq if available for reliable JSON parsing
+  if command -v jq >/dev/null 2>&1; then
+    local oro_packages
+    oro_packages=$(jq -r '.require // {} | keys[]' "$composer_file" 2>/dev/null | \
+      grep -E '^(oro/platform|oro/commerce|oro/crm|oro/customer-portal|marello/marello)$' | head -1)
+    if [[ -n "$oro_packages" ]]; then
+      return 0
+    fi
+  else
+    # Fallback: grep-based detection (less reliable but works without jq)
+    if grep -qE '"(oro/platform|oro/commerce|oro/crm|oro/customer-portal|marello/marello)"' "$composer_file" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  
+  return 1
+}

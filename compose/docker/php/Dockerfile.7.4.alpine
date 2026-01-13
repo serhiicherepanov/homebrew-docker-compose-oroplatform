@@ -121,6 +121,7 @@ RUN set -eux; \
     pcntl \
     imap \
     sockets \
+    ftp \
     bcmath \
     mbstring \
     opcache \

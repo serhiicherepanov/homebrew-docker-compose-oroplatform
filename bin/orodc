@@ -323,9 +323,17 @@ case "$1" in
           exec "${LIBEXEC_DIR}/proxy/install-certs.sh" "$@"
         fi
         ;;
+      restart)
+        shift
+        if [[ -n "${ORODC_IS_INTERACTIVE_MENU:-}" ]]; then
+          execute_with_menu_return "${LIBEXEC_DIR}/proxy/restart.sh" "$@"
+        else
+          exec "${LIBEXEC_DIR}/proxy/restart.sh" "$@"
+        fi
+        ;;
       *)
         msg_error "Unknown proxy command: ${1:-<none>}"
-        msg_info "Available: up, down, install-certs"
+        msg_info "Available: up, down, restart, install-certs"
         exit 1
         ;;
     esac

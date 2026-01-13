@@ -26,6 +26,13 @@ if [[ $# -eq 0 ]]; then
 fi
 
 # Execute command in cli container with all arguments
-# Use -T to disable TTY allocation and -q to suppress Docker Compose output
+# Automatically detect interactive mode: if stdin is a terminal, don't use -T (allow TTY)
+# If stdin is not a terminal (piped/redirected), use -T to disable TTY
 # -q suppresses STDOUT from docker compose, but command output still visible
-exec ${DOCKER_COMPOSE_BIN_CMD} run --rm -T -q cli "$@"
+if [[ -t 0 ]]; then
+  # Interactive mode: stdin is a terminal - allow TTY allocation
+  exec ${DOCKER_COMPOSE_BIN_CMD} run --rm -q cli "$@"
+else
+  # Non-interactive mode: stdin is piped/redirected - disable TTY
+  exec ${DOCKER_COMPOSE_BIN_CMD} run --rm -T -q cli "$@"
+fi

@@ -99,6 +99,7 @@ RUN set -eux; \
   curl -fsSL https://github.com/xdebug/xdebug/archive/refs/tags/$EXT_XDEBUG_VERSION.tar.gz | tar xvz -C /usr/src/php/ext/xdebug --strip 1; \
   docker-php-ext-configure xdebug; \
   docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) xdebug; \
+  rm -rf /usr/src/php/ext/xdebug; \
   \
   docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) \
     pdo_pgsql \
@@ -114,6 +115,7 @@ RUN set -eux; \
     pcntl \
     imap \
     sockets \
+    ftp \
     bcmath \
     mbstring \
     opcache \

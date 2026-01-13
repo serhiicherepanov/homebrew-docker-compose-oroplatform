@@ -499,6 +499,15 @@ initialize_environment() {
       export DC_ORO_CONFIG_DIR="${HOME}/.docker-compose-oroplatform/${DC_ORO_NAME}"
     fi
 
+    # Set DOCKER_BASE_URL from DC_ORO_URL or default to https://${DC_ORO_NAME}.docker.local
+    # This variable is always available in containers for use in installation commands
+    if [[ -n "${DC_ORO_URL:-}" ]]; then
+      export DOCKER_BASE_URL="${DC_ORO_URL}"
+    else
+      export DOCKER_BASE_URL="https://${DC_ORO_NAME}.docker.local"
+    fi
+    debug_log "initialize_environment: DOCKER_BASE_URL=${DOCKER_BASE_URL}"
+
     # Create config directory
     mkdir -p "${DC_ORO_CONFIG_DIR}"
 
@@ -723,6 +732,30 @@ initialize_environment() {
       fi
     else
       debug_log "initialize_environment: DC_ORO_DATABASE_SCHEMA not set, skipping database-specific compose file"
+    fi
+
+    # Add consumer compose file for Oro projects
+    # Source common.sh to get is_oro_project function
+    local common_sh_path=""
+    if [[ -n "${SCRIPT_DIR:-}" ]] && [[ -f "${SCRIPT_DIR}/lib/common.sh" ]]; then
+      common_sh_path="${SCRIPT_DIR}/lib/common.sh"
+    elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/common.sh" ]]; then
+      common_sh_path="$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    fi
+    
+    if [[ -n "$common_sh_path" ]]; then
+      source "$common_sh_path" 2>/dev/null || true
+    fi
+    
+    if is_oro_project 2>/dev/null; then
+      if [[ -f "${DC_ORO_CONFIG_DIR}/docker-compose-consumer.yml" ]]; then
+        DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-consumer.yml"
+        debug_log "initialize_environment: added docker-compose-consumer.yml (Oro project detected)"
+      else
+        debug_log "initialize_environment: docker-compose-consumer.yml not found (Oro project detected)"
+      fi
+    else
+      debug_log "initialize_environment: skipping docker-compose-consumer.yml (not an Oro project)"
     fi
 
     # Add user custom compose file if exists

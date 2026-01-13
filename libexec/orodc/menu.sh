@@ -74,6 +74,12 @@ show_interactive_menu() {
     # We're in a project - register it if needed
     register_environment "${DC_ORO_NAME}" "$(pwd)" "${DC_ORO_CONFIG_DIR}" 2>/dev/null || true
   fi
+  
+  # Detect project family for conditional menu items
+  local project_family="generic"
+  if [[ -n "${DC_ORO_NAME:-}" ]] && check_in_project 2>/dev/null; then
+    project_family=$(project_family_resolve)
+  fi
 
   local current_status="uninitialized"
   local status_display=""
@@ -179,9 +185,13 @@ show_interactive_menu() {
   printf "\033[0m" >&2
   echo "" >&2
   
+  # Calculate total options based on project family
+  local menu_items_str=$(build_menu_items "$project_family")
+  local -a temp_menu_items=($menu_items_str)
+  local total_options=${#temp_menu_items[@]}
+  
   # Interactive selection with arrow keys
   local selected=1
-  local total_options=21
   local choice=""
   
   # Function to truncate text to maximum length
@@ -258,6 +268,8 @@ show_interactive_menu() {
     local use_two_cols=$2
     local input_buf="${3:-}"
     local use_three_cols="${4:-false}"
+    local proj_family="${5:-generic}"
+    local total_opts="${6:-21}"
     
     # Clear screen
     tput clear 2>/dev/null || clear || true
@@ -268,7 +280,7 @@ show_interactive_menu() {
     echo "" >&2
     
     # Redraw menu with selection
-    display_menu_with_selection $selected_option $use_two_cols "$use_three_cols" || true
+    display_menu_with_selection $selected_option $use_two_cols "$use_three_cols" "$proj_family" || true
     
     # Redraw status
     echo "" >&2
@@ -308,7 +320,7 @@ show_interactive_menu() {
     printf "\033[0m\033[?25h" >&2
     tput sgr0 2>/dev/null || true
     stty sane 2>/dev/null || true
-    echo -n "Use ↑↓ arrows to navigate, or type number [1-21], 'v' for VERBOSE, 'q' to quit: " >&2
+    echo -n "Use ↑↓ arrows to navigate, or type number [1-${total_opts}], 'v' for VERBOSE, 'q' to quit: " >&2
     # Display input buffer if user is typing a number
     if [[ -n "$input_buf" ]]; then
       printf "%s" "$input_buf" >&2
@@ -317,39 +329,84 @@ show_interactive_menu() {
     printf "\033[0m" >&2
   }
   
+  # Function to build menu items array based on project family
+  # Returns array of menu items
+  build_menu_items() {
+    local proj_family="${1:-generic}"
+    local -a items=()
+    local opt_num=1
+    
+    # Always show: Environment Management (1-6)
+    items+=("List all environments")
+    items+=("Initialize environment")
+    items+=("Start environment")
+    items+=("Stop environment")
+    items+=("Delete environment")
+    items+=("Re-build/Re-download Images")
+    opt_num=7
+    
+    # Always show: Maintenance (7-9)
+    items+=("Run doctor")
+    items+=("Connect via SSH")
+    items+=("Connect via CLI")
+    opt_num=10
+    
+    # Always show: Database (10-12)
+    items+=("Export database")
+    items+=("Import database")
+    items+=("Purge database")
+    opt_num=13
+    
+    # Always show: Configuration (13-14)
+    items+=("Add/Manage domains")
+    items+=("Configure application URL")
+    opt_num=15
+    
+    # Conditional: Framework-specific maintenance
+    if [[ "$proj_family" == "oro" ]]; then
+      # Oro Maintenance (15-19)
+      items+=("Clear cache")
+      items+=("Platform update")
+      items+=("Install with demo")
+      items+=("Install without demo")
+      items+=("Install dependencies")
+      opt_num=20
+    elif [[ "$proj_family" == "magento" ]]; then
+      # Magento Maintenance (15-17)
+      items+=("Clear cache")
+      items+=("Install Magento")
+      items+=("Disable 2FA")
+      opt_num=18
+    elif [[ "$proj_family" != "laravel" ]] && [[ "$proj_family" != "symfony" ]] && [[ "$proj_family" != "yii" ]]; then
+      # Generic PHP projects: show cache clear only (15)
+      items+=("Clear cache")
+      opt_num=16
+    fi
+    
+    # Always show: Proxy (last 2 options)
+    items+=("Start proxy")
+    items+=("Stop proxy")
+    
+    # Return items as space-separated string (will be converted to array by caller)
+    echo "${items[@]}"
+  }
+  
   # Function to display menu with selection highlight
   display_menu_with_selection() {
     local selected_option=$1
     local use_two_cols=$2
     local use_three_cols="${3:-false}"
+    local proj_family="${4:-generic}"
     
     # Reset attributes before drawing
     printf "\033[0m" >&2
     
-    # Define menu items with full text (will be truncated to 32 chars)
-    local menu_items=(
-      "List all environments"
-      "Initialize environment"
-      "Start environment"
-      "Stop environment"
-      "Delete environment"
-      "Re-build/Re-download Images"
-      "Run doctor"
-      "Connect via SSH"
-      "Connect via CLI"
-      "Export database"
-      "Import database"
-      "Purge database"
-      "Add/Manage domains"
-      "Configure application URL"
-      "Clear cache"
-      "Platform update"
-      "Install with demo"
-      "Install without demo"
-      "Install dependencies"
-      "Start proxy"
-      "Stop proxy"
-    )
+    # Build menu items based on project family
+    local menu_items_str=$(build_menu_items "$proj_family")
+    local -a menu_items=($menu_items_str)
+    
+    # Calculate total options
+    local total_menu_options=${#menu_items[@]}
     
     if [[ "$use_three_cols" == "true" ]]; then
       # Three column layout (34 chars per column: 2 spaces + 32 chars content)
@@ -533,51 +590,96 @@ show_interactive_menu() {
       echo "" >&2
       printf "\033[0m" >&2
     else
-      # Single column layout
+      # Single column layout - use dynamic menu items
+      local opt_num=1
       printf "\033[0m" >&2
       echo -e "\033[1;36mEnvironment Management:\033[0m" >&2
       printf "\033[0m" >&2
-      render_menu_option 1 $((selected_option == 1)) "List all environments"
-      render_menu_option 2 $((selected_option == 2)) "Initialize environment"
-      render_menu_option 3 $((selected_option == 3)) "Start environment"
-      render_menu_option 4 $((selected_option == 4)) "Stop environment"
-      render_menu_option 5 $((selected_option == 5)) "Delete environment"
-      render_menu_option 6 $((selected_option == 6)) "Re-build/Re-download Images"
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
       echo "" >&2
       printf "\033[0m" >&2
       echo -e "\033[1;32mMaintenance:\033[0m" >&2
       printf "\033[0m" >&2
-      render_menu_option 7 $((selected_option == 7)) "Run doctor"
-      render_menu_option 8 $((selected_option == 8)) "Connect via SSH"
-      render_menu_option 9 $((selected_option == 9)) "Connect via CLI"
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
       echo "" >&2
       printf "\033[0m" >&2
       echo -e "\033[1;35mDatabase:\033[0m" >&2
       printf "\033[0m" >&2
-      render_menu_option 10 $((selected_option == 10)) "Export database"
-      render_menu_option 11 $((selected_option == 11)) "Import database"
-      render_menu_option 12 $((selected_option == 12)) "Purge database"
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
       echo "" >&2
       printf "\033[0m" >&2
       echo -e "\033[1;33mConfiguration:\033[0m" >&2
       printf "\033[0m" >&2
-      render_menu_option 13 $((selected_option == 13)) "Add/Manage domains"
-      render_menu_option 14 $((selected_option == 14)) "Configure application URL"
-      echo "" >&2
-      printf "\033[0m" >&2
-      echo -e "\033[1;31mOro Maintenance:\033[0m" >&2
-      printf "\033[0m" >&2
-      render_menu_option 15 $((selected_option == 15)) "Clear cache"
-      render_menu_option 16 $((selected_option == 16)) "Platform update"
-      render_menu_option 17 $((selected_option == 17)) "Install with demo"
-      render_menu_option 18 $((selected_option == 18)) "Install without demo"
-      render_menu_option 19 $((selected_option == 19)) "Install dependencies"
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      
+      # Conditional: Framework-specific maintenance
+      if [[ "$proj_family" == "oro" ]]; then
+        echo "" >&2
+        printf "\033[0m" >&2
+        echo -e "\033[1;31mOro Maintenance:\033[0m" >&2
+        printf "\033[0m" >&2
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+      elif [[ "$proj_family" == "magento" ]]; then
+        echo "" >&2
+        printf "\033[0m" >&2
+        echo -e "\033[1;31mMagento Maintenance:\033[0m" >&2
+        printf "\033[0m" >&2
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+      elif [[ "$proj_family" != "laravel" ]] && [[ "$proj_family" != "symfony" ]] && [[ "$proj_family" != "yii" ]]; then
+        # Generic PHP projects: show cache clear only
+        echo "" >&2
+        printf "\033[0m" >&2
+        echo -e "\033[1;31mMaintenance:\033[0m" >&2
+        printf "\033[0m" >&2
+        render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+        ((opt_num++))
+      fi
+      
       echo "" >&2
       printf "\033[0m" >&2
       echo -e "\033[1;37mProxy:\033[0m" >&2
       printf "\033[0m" >&2
-      render_menu_option 20 $((selected_option == 20)) "Start proxy"
-      render_menu_option 21 $((selected_option == 21)) "Stop proxy"
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
+      ((opt_num++))
+      render_menu_option $opt_num $((selected_option == opt_num)) "${menu_items[$((opt_num-1))]}"
       printf "\033[0m" >&2
     fi
     
@@ -594,7 +696,7 @@ show_interactive_menu() {
   local input_buffer=""
   
   # Initial display with selection
-  redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+  redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$project_family" "$total_options" || true
   
   # Enable raw input mode for arrow keys (without time 0 to make read blocking)
   stty -echo -icanon min 1 2>/dev/null || true
@@ -624,14 +726,14 @@ show_interactive_menu() {
             if [[ $selected -gt 1 ]]; then
               ((selected--)) || true
               input_buffer=""  # Clear input buffer when using arrows
-              redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+              redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$project_family" "$total_options" || true
             fi
             ;;
           B) # Down arrow
             if [[ $selected -lt $total_options ]]; then
               ((selected++)) || true
               input_buffer=""  # Clear input buffer when using arrows
-              redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+              redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$project_family" "$total_options" || true
             fi
             ;;
         esac
@@ -645,7 +747,7 @@ show_interactive_menu() {
       # Clear input buffer if user presses backspace
       if [[ -n "$input_buffer" ]]; then
         input_buffer=""
-        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$project_family" "$total_options" || true
       fi
       continue
     # Filter: only allow Latin letters and digits
@@ -658,7 +760,7 @@ show_interactive_menu() {
       # Add first digit to input buffer
       input_buffer="$key"
       local num_input="$key"
-      # Try to read second digit if available (for 10-21)
+      # Try to read second digit if available (for 10+)
       # Use timeout to check if user is typing two-digit number
       # But NEVER select immediately - always wait for explicit Enter
       if read -rsn1 -t 0.6 second_digit 2>/dev/null; then
@@ -672,15 +774,15 @@ show_interactive_menu() {
         fi
       fi
       # Validate number and update selection (always wait for Enter in next iteration)
-      if [[ "$num_input" =~ ^[1-9]$ ]] || [[ "$num_input" =~ ^1[0-9]$ ]] || [[ "$num_input" == "20" ]] || [[ "$num_input" == "21" ]]; then
+      if [[ "$num_input" =~ ^[0-9]+$ ]] && [[ "$num_input" -ge 1 ]] && [[ "$num_input" -le "$total_options" ]]; then
         # Update selected option to match input, wait for Enter to confirm
         selected=$num_input
-        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$project_family" "$total_options" || true
         # Continue loop to wait for Enter - NEVER break here
       else
         # Invalid number - clear buffer and redraw
         input_buffer=""
-        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$project_family" "$total_options" || true
       fi
     # Handle 'v' for VERBOSE toggle
     elif [[ "$key" == "v" ]] || [[ "$key" == "V" ]]; then
@@ -940,7 +1042,17 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return cache clear
+      if [[ "$project_family" == "oro" ]] || [[ "$project_family" == "magento" ]] || [[ "$project_family" == "generic" ]]; then
+        if [[ "$project_family" == "magento" ]]; then
+          run_command_with_menu_return exec bin/magento cache:flush
+        else
+          run_command_with_menu_return cache clear
+        fi
+      else
+        msg_warning "Invalid option for this project type"
+        sleep 1
+        show_interactive_menu
+      fi
       ;;
     16)
       if ! check_in_project; then
@@ -951,7 +1063,15 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return platform-update
+      if [[ "$project_family" == "oro" ]]; then
+        run_command_with_menu_return platform-update
+      elif [[ "$project_family" == "magento" ]]; then
+        run_command_with_menu_return exec bin/magento setup:install --interactive
+      else
+        msg_warning "Invalid option for this project type"
+        sleep 1
+        show_interactive_menu
+      fi
       ;;
     17)
       if ! check_in_project; then
@@ -962,7 +1082,16 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return install
+      if [[ "$project_family" == "oro" ]]; then
+        run_command_with_menu_return install
+      elif [[ "$project_family" == "magento" ]]; then
+        # Disable 2FA for Magento
+        run_command_with_menu_return exec bash -c "bin/magento module:disable Magento_TwoFactorAuth Magento_AdminAdobeImsTwoFactorAuth 2>/dev/null || bin/magento module:disable Magento_TwoFactorAuth; bin/magento setup:upgrade; bin/magento cache:flush"
+      else
+        msg_warning "Invalid option for this project type"
+        sleep 1
+        show_interactive_menu
+      fi
       ;;
     18)
       if ! check_in_project; then
@@ -973,7 +1102,13 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return install --without-demo
+      if [[ "$project_family" == "oro" ]]; then
+        run_command_with_menu_return install --without-demo
+      else
+        msg_warning "Invalid option for this project type"
+        sleep 1
+        show_interactive_menu
+      fi
       ;;
     19)
       if ! check_in_project; then
@@ -984,13 +1119,21 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return composer install
+      if [[ "$project_family" == "oro" ]]; then
+        run_command_with_menu_return composer install
+      else
+        msg_warning "Invalid option for this project type"
+        sleep 1
+        show_interactive_menu
+      fi
       ;;
-    20)
-      run_command_with_menu_return proxy up -d
-      ;;
-    21)
-      run_command_with_menu_return proxy down
+    20|21)
+      # Proxy commands (always available)
+      if [[ "$choice" == "20" ]]; then
+        run_command_with_menu_return proxy up -d
+      else
+        run_command_with_menu_return proxy down
+      fi
       ;;
     v|V)
       if [[ -n "${VERBOSE:-}" ]]; then

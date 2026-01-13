@@ -293,43 +293,147 @@ get_compatible_node_versions() {
   esac
 }
 
-# Detect if current project is an Oro Platform application
-# Returns 0 (true) if Oro project, 1 (false) otherwise
-# Can be overridden with DC_ORO_IS_ORO_PROJECT env var
-is_oro_project() {
+# Resolve project family/type from composer.json and project structure
+# Returns: oro, magento, laravel, symfony, yii, or generic
+# Can be overridden with DC_ORO_PROJECT_FAMILY env var
+project_family_resolve() {
   # Check for explicit override first
+  if [[ -n "${DC_ORO_PROJECT_FAMILY:-}" ]]; then
+    echo "${DC_ORO_PROJECT_FAMILY}"
+    return 0
+  fi
+  
+  # Check for explicit Oro override (backward compatibility)
   if [[ -n "${DC_ORO_IS_ORO_PROJECT:-}" ]]; then
     case "${DC_ORO_IS_ORO_PROJECT,,}" in
       1|true|yes)
+        echo "oro"
         return 0
         ;;
       0|false|no)
-        return 1
+        # Force generic if explicitly set to false
+        echo "generic"
+        return 0
         ;;
     esac
   fi
   
-  # Auto-detect from composer.json
   local composer_file="${DC_ORO_APPDIR:-$PWD}/composer.json"
+  local app_dir="${DC_ORO_APPDIR:-$PWD}"
+  
+  # If no composer.json, return generic
   if [[ ! -f "$composer_file" ]]; then
-    return 1
+    echo "generic"
+    return 0
   fi
   
-  # Check for Oro ecosystem packages in require section
-  # Uses jq if available for reliable JSON parsing
+  # Detect from composer.json dependencies
+  # Priority order: Oro > Magento > Laravel > Symfony > Yii > Generic
+  
   if command -v jq >/dev/null 2>&1; then
-    local oro_packages
-    oro_packages=$(jq -r '.require // {} | keys[]' "$composer_file" 2>/dev/null | \
-      grep -E '^(oro/platform|oro/commerce|oro/crm|oro/customer-portal|marello/marello)$' | head -1)
-    if [[ -n "$oro_packages" ]]; then
+    # Use jq for reliable JSON parsing
+    local packages
+    packages=$(jq -r '.require // {} | keys[]' "$composer_file" 2>/dev/null || echo "")
+    
+    # Check for Oro ecosystem packages
+    if echo "$packages" | grep -qE '^(oro/platform|oro/commerce|oro/crm|oro/customer-portal|marello/marello)$'; then
+      echo "oro"
+      return 0
+    fi
+    
+    # Check for Magento packages
+    if echo "$packages" | grep -qE '^(magento/product-|magento/magento2-|magento/framework|mage-os/mageos)'; then
+      echo "magento"
+      return 0
+    fi
+    
+    # Check for Laravel
+    if echo "$packages" | grep -qE '^laravel/framework$'; then
+      echo "laravel"
+      return 0
+    fi
+    
+    # Check for Symfony
+    if echo "$packages" | grep -qE '^symfony/symfony$'; then
+      echo "symfony"
+      return 0
+    fi
+    
+    # Check for Yii
+    if echo "$packages" | grep -qE '^(yiisoft/yii2|yiisoft/yii)$'; then
+      echo "yii"
       return 0
     fi
   else
     # Fallback: grep-based detection (less reliable but works without jq)
+    
+    # Check for Oro ecosystem packages
     if grep -qE '"(oro/platform|oro/commerce|oro/crm|oro/customer-portal|marello/marello)"' "$composer_file" 2>/dev/null; then
+      echo "oro"
+      return 0
+    fi
+    
+    # Check for Magento packages
+    if grep -qE '"(magento/product-|magento/magento2-|magento/framework|mage-os/mageos)' "$composer_file" 2>/dev/null; then
+      echo "magento"
+      return 0
+    fi
+    
+    # Check for Laravel
+    if grep -qE '"laravel/framework"' "$composer_file" 2>/dev/null; then
+      echo "laravel"
+      return 0
+    fi
+    
+    # Check for Symfony
+    if grep -qE '"symfony/symfony"' "$composer_file" 2>/dev/null; then
+      echo "symfony"
+      return 0
+    fi
+    
+    # Check for Yii
+    if grep -qE '"(yiisoft/yii2|yiisoft/yii)"' "$composer_file" 2>/dev/null; then
+      echo "yii"
       return 0
     fi
   fi
   
-  return 1
+  # Check for project-specific files (fallback detection)
+  
+  # Check for bin/magento (Magento-specific)
+  if [[ -f "${app_dir}/bin/magento" ]]; then
+    echo "magento"
+    return 0
+  fi
+  
+  # Check for artisan (Laravel-specific)
+  if [[ -f "${app_dir}/artisan" ]]; then
+    echo "laravel"
+    return 0
+  fi
+  
+  # Check for bin/console (could be Symfony, but not if it's Oro)
+  # Note: We already checked for Oro above, so if we get here and have bin/console, it's likely Symfony
+  if [[ -f "${app_dir}/bin/console" ]]; then
+    echo "symfony"
+    return 0
+  fi
+  
+  # Default: generic PHP project
+  echo "generic"
+  return 0
+}
+
+# Detect if current project is an Oro Platform application
+# Returns 0 (true) if Oro project, 1 (false) otherwise
+# Can be overridden with DC_ORO_IS_ORO_PROJECT env var
+# Backward compatibility wrapper around project_family_resolve
+is_oro_project() {
+  local family
+  family=$(project_family_resolve)
+  if [[ "$family" == "oro" ]]; then
+    return 0
+  else
+    return 1
+  fi
 }

@@ -499,6 +499,15 @@ initialize_environment() {
       export DC_ORO_CONFIG_DIR="${HOME}/.docker-compose-oroplatform/${DC_ORO_NAME}"
     fi
 
+    # Set DOCKER_BASE_URL from DC_ORO_URL or default to https://${DC_ORO_NAME}.docker.local
+    # This variable is always available in containers for use in installation commands
+    if [[ -n "${DC_ORO_URL:-}" ]]; then
+      export DOCKER_BASE_URL="${DC_ORO_URL}"
+    else
+      export DOCKER_BASE_URL="https://${DC_ORO_NAME}.docker.local"
+    fi
+    debug_log "initialize_environment: DOCKER_BASE_URL=${DOCKER_BASE_URL}"
+
     # Create config directory
     mkdir -p "${DC_ORO_CONFIG_DIR}"
 

@@ -1,8 +1,8 @@
-# 🚀 OroCommerce / OroCrm / OroPlatform / MarelloCommerce - Docker Compose Environment (OroDC)
+# 🚀 OroCommerce / OroCrm / OroPlatform / MarelloCommerce / Magento / Any PHP CMS - Docker Compose Environment (OroDC)
 
 ![Docker architecture](docs/docker-architecture-small.png)
 
-**Modern CLI tool to run ORO applications locally or on a server.** Designed specifically for local development environments with enterprise-grade performance and developer experience.
+**Modern CLI tool to run PHP applications locally or on a server.** Designed specifically for local development environments with enterprise-grade performance and developer experience. Supports ORO Platform applications (OroCommerce, OroCRM, OroPlatform, MarelloCommerce), Magento, and any PHP-based CMS or framework.
 
 [![Version](https://img.shields.io/badge/Version-0.12.5-brightgreen.svg)](https://github.com/digitalspacestdio/homebrew-docker-compose-oroplatform/releases)
 [![Homebrew](https://img.shields.io/badge/Homebrew-Available-orange.svg)](https://brew.sh/)
@@ -107,6 +107,108 @@ orodc psql -l                      # List databases directly
 orodc psql -c "SELECT version();"  # Execute SQL commands
 orodc tests bin/phpunit --testsuite=unit # Run PHPUnit tests
 orodc tests bin/behat --available-suites # Run Behat behavior tests
+```
+
+## 🎯 Supported Applications
+
+OroDC supports **any PHP-based application**, including:
+
+- **ORO Platform**: OroCommerce, OroCRM, OroPlatform, MarelloCommerce
+- **Magento**: Magento 2.x (Open Source, Commerce)
+- **Symfony**: Any Symfony-based application
+- **Laravel**: Laravel applications
+- **WordPress**: WordPress sites
+- **Drupal**: Drupal CMS
+- **Any PHP CMS**: Generic PHP applications
+
+### 📦 Magento 2 Example
+
+Complete setup example for Magento 2:
+
+```bash
+# 1. Install OroDC
+brew install digitalspacestdio/docker-compose-oroplatform/docker-compose-oroplatform
+
+# 2. Clone Magento repository
+git clone https://github.com/magento/magento2.git ~/magento2
+cd ~/magento2
+
+# 3. Initialize OroDC environment
+orodc init
+
+# 4. Start containers
+orodc up -d
+
+# 5. Install Magento via CLI
+orodc exec bash -c 'bin/magento setup:install \
+  --base-url="${DOCKER_BASE_URL}" \
+  --base-url-secure="${DOCKER_BASE_URL}" \
+  --db-host="${DC_ORO_DATABASE_HOST:-database}" \
+  --db-name="${DC_ORO_DATABASE_DBNAME:-app}" \
+  --db-user="${DC_ORO_DATABASE_USER:-app}" \
+  --db-password="${DC_ORO_DATABASE_PASSWORD:-app}" \
+  --admin-firstname=Admin \
+  --admin-lastname=User \
+  --admin-email=admin@example.com \
+  --admin-user=admin \
+  --admin-password=Admin123456 \
+  --backend-frontname=admin \
+  --language=en_US \
+  --currency=USD \
+  --timezone=America/New_York \
+  --use-rewrites=1 \
+  --use-secure=1 \
+  --use-secure-admin=1 \
+  --search-engine=opensearch \
+  --opensearch-host=search \
+  --opensearch-port=9200'
+
+# 6. Deploy static content
+orodc exec bin/magento setup:static-content:deploy -f
+
+# 7. Compile DI
+orodc exec bin/magento setup:di:compile
+
+# 8. Clear cache
+orodc exec bin/magento cache:flush
+
+# Access your Magento installation
+# Frontend: https://magento2.docker.local
+# Admin: https://magento2.docker.local/admin
+# Admin credentials: admin / Admin123456
+```
+
+**Key Magento Commands:**
+```bash
+# Static content deployment
+orodc exec bin/magento setup:static-content:deploy -f
+
+# Compile dependency injection
+orodc exec bin/magento setup:di:compile
+
+# Cache management
+orodc exec bin/magento cache:clean
+orodc exec bin/magento cache:flush
+
+# Index management
+orodc exec bin/magento indexer:reindex
+
+# Enable developer mode
+orodc exec bin/magento deploy:mode:set developer
+```
+
+### 🚀 OroCommerce / OroPlatform Example
+
+```bash
+# Clone and setup OroCommerce
+git clone --single-branch --branch 6.1.4 https://github.com/oroinc/orocommerce-application.git ~/orocommerce
+cd ~/orocommerce
+
+# Install and start
+orodc install && orodc up -d
+
+# Access: https://orocommerce.docker.local/admin
+# Default credentials: admin / 12345678
 ```
 
 ## ⚠️ Critical Testing Requirements

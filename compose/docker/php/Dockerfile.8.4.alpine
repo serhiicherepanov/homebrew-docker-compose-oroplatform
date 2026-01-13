@@ -11,7 +11,6 @@ ARG EXT_REDIS_VERSION=6.2.0
 ARG EXT_IGBINARY_VERSION=3.2.15
 ARG EXT_MONGODB_VERSION=1.21.0
 ARG EXT_XDEBUG_VERSION=3.4.5
-ARG EXT_YAML_VERSION=2.2.3
 
 # persistent / runtime deps
 RUN apk add --no-cache \
@@ -47,7 +46,6 @@ RUN apk add --no-cache \
     mysql-client \
     util-linux \
     patch \
-    yaml \
   ;
 
 ARG REDIS_VERSION="6.2.9"
@@ -73,7 +71,6 @@ RUN set -eux; \
     tidyhtml-dev \
     imap-dev \
     oniguruma-dev \
-    yaml-dev \
     musl-dev \ 
     gcc \
     make \
@@ -121,12 +118,6 @@ RUN set -eux; \
   docker-php-ext-configure xdebug; \
   docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) xdebug; \
   rm -rf /usr/src/php/ext/xdebug; \
-  \
-  mkdir -p /usr/src/php/ext/yaml; \
-  curl -fsSL https://github.com/php/pecl-file_formats-yaml/archive/refs/tags/$EXT_YAML_VERSION.tar.gz | tar xvz -C /usr/src/php/ext/yaml --strip 1; \
-  docker-php-ext-configure yaml; \
-  docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) yaml; \
-  rm -rf /usr/src/php/ext/yaml; \
   \
   docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) \
     pdo_pgsql \

@@ -86,6 +86,268 @@ exec_compose_command() {
   return $?
 }
 
+# Convert bytes to human-readable format
+# Usage: bytes_to_human <bytes>
+bytes_to_human() {
+  local bytes="$1"
+  if [[ "$bytes" -ge 1073741824 ]]; then
+    echo "$((bytes / 1073741824))GB"
+  elif [[ "$bytes" -ge 1048576 ]]; then
+    echo "$((bytes / 1048576))MB"
+  elif [[ "$bytes" -ge 1024 ]]; then
+    echo "$((bytes / 1024))KB"
+  else
+    echo "${bytes}B"
+  fi
+}
+
+# Calculate project directory size in bytes
+# Usage: calculate_project_size
+# Returns: size in bytes (or 0 if error)
+calculate_project_size() {
+  local project_dir="${DC_ORO_APPDIR:-}"
+  
+  # Return 0 if project directory not set or doesn't exist
+  if [[ -z "$project_dir" ]] || [[ ! -d "$project_dir" ]]; then
+    echo "0"
+    return 0
+  fi
+  
+  # Use du -sb to get exact byte count
+  local size_bytes
+  size_bytes=$(du -sb "${project_dir}" 2>/dev/null | awk '{print $1}')
+  
+  # Return 0 if calculation failed
+  if [[ -z "$size_bytes" ]] || ! [[ "$size_bytes" =~ ^[0-9]+$ ]]; then
+    echo "0"
+    return 0
+  fi
+  
+  echo "$size_bytes"
+}
+
+# Check available disk space in Docker volume
+# Usage: check_volume_disk_space <volume_name>
+# Returns: available space in bytes (or 0 if error)
+check_volume_disk_space() {
+  local volume_name="$1"
+  
+  # Return 0 if volume name not provided
+  if [[ -z "$volume_name" ]]; then
+    echo "0"
+    return 0
+  fi
+  
+  # Check if volume exists
+  if ! docker volume inspect "$volume_name" >/dev/null 2>&1; then
+    # Volume doesn't exist - estimate from host disk space where Docker stores volumes
+    # Docker volumes are typically stored in /var/lib/docker/volumes on Linux
+    # or ~/Library/Containers/com.docker.docker/Data/vms/0/data/docker/volumes on macOS
+    # For simplicity, check root filesystem available space
+    local available_bytes
+    available_bytes=$(df -B1 / 2>/dev/null | tail -1 | awk '{print $4}')
+    if [[ -n "$available_bytes" ]] && [[ "$available_bytes" =~ ^[0-9]+$ ]]; then
+      echo "$available_bytes"
+      return 0
+    fi
+    echo "0"
+    return 0
+  fi
+  
+  # Use temporary container to check volume space
+  local available_bytes
+  available_bytes=$(docker run --rm -v "${volume_name}:/check" alpine df -B1 /check 2>/dev/null | tail -1 | awk '{print $4}')
+  
+  # Return 0 if check failed
+  if [[ -z "$available_bytes" ]] || ! [[ "$available_bytes" =~ ^[0-9]+$ ]]; then
+    echo "0"
+    return 0
+  fi
+  
+  echo "$available_bytes"
+}
+
+# Check available disk space in container filesystem
+# Usage: check_container_disk_space <container_name> <mount_path>
+# Returns: available space in bytes (or 0 if error)
+check_container_disk_space() {
+  local container_name="$1"
+  local mount_path="${2:-/app}"
+  
+  # Return 0 if container name not provided
+  if [[ -z "$container_name" ]]; then
+    echo "0"
+    return 0
+  fi
+  
+  # Check if container is running
+  if ! docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${container_name}$"; then
+    # Container not running - check volume space instead
+    local volume_name="${DC_ORO_NAME:-}_appcode"
+    check_volume_disk_space "$volume_name"
+    return 0
+  fi
+  
+  # Use docker exec to check space in container
+  local available_bytes
+  available_bytes=$(docker exec "${container_name}" df -B1 "${mount_path}" 2>/dev/null | tail -1 | awk '{print $4}')
+  
+  # Return 0 if check failed
+  if [[ -z "$available_bytes" ]] || ! [[ "$available_bytes" =~ ^[0-9]+$ ]]; then
+    echo "0"
+    return 0
+  fi
+  
+  echo "$available_bytes"
+}
+
+# Check disk space for rsync sync mode
+# Usage: check_rsync_sync_disk_space
+# Returns: 0 if sufficient space, 1 if insufficient
+check_rsync_sync_disk_space() {
+  local mode="${DC_ORO_MODE:-default}"
+  
+  # Skip if not rsync mode
+  if [[ "$mode" != "ssh" ]]; then
+    return 0
+  fi
+  
+  # Skip if bypass flag set
+  if [[ "${DC_ORO_SKIP_DISK_CHECK:-}" == "1" ]]; then
+    return 0
+  fi
+  
+  msg_info "Checking disk space for rsync sync..."
+  
+  # Calculate required space (project size + 20% overhead)
+  local project_bytes
+  project_bytes=$(calculate_project_size)
+  
+  if [[ "$project_bytes" -eq 0 ]]; then
+    msg_warning "Could not calculate project size, skipping disk space check"
+    return 0
+  fi
+  
+  local required_bytes=$((project_bytes * 120 / 100))
+  
+  # Check available space in target container or volume
+  local available_bytes=0
+  local container_name="${DC_ORO_NAME:-}_cli"
+  
+  # Try to check container space first
+  if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${container_name}$"; then
+    available_bytes=$(check_container_disk_space "$container_name" "${DC_ORO_APPDIR:-/app}")
+  else
+    # Container not running, check volume space
+    local volume_name="${DC_ORO_NAME:-}_appcode"
+    available_bytes=$(check_volume_disk_space "$volume_name")
+  fi
+  
+  if [[ "$available_bytes" -eq 0 ]]; then
+    msg_warning "Could not check available disk space, skipping check"
+    return 0
+  fi
+  
+  # Compare required vs available
+  if [[ "$available_bytes" -lt "$required_bytes" ]]; then
+    local required_human=$(bytes_to_human "$required_bytes")
+    local available_human=$(bytes_to_human "$available_bytes")
+    msg_error "Insufficient disk space for rsync sync"
+    msg_error "Required: ${required_human}, Available: ${available_human}"
+    msg_error "Set DC_ORO_SKIP_DISK_CHECK=1 to bypass this check"
+    return 1
+  fi
+  
+  local required_human=$(bytes_to_human "$required_bytes")
+  local available_human=$(bytes_to_human "$available_bytes")
+  msg_ok "Disk space check passed (Required: ${required_human}, Available: ${available_human})"
+  return 0
+}
+
+# Check disk space for mutagen sync mode
+# Usage: check_mutagen_sync_disk_space
+# Returns: 0 if sufficient space, 1 if insufficient
+check_mutagen_sync_disk_space() {
+  local mode="${DC_ORO_MODE:-default}"
+  
+  # Skip if not mutagen mode
+  if [[ "$mode" != "mutagen" ]]; then
+    return 0
+  fi
+  
+  # Skip if bypass flag set
+  if [[ "${DC_ORO_SKIP_DISK_CHECK:-}" == "1" ]]; then
+    return 0
+  fi
+  
+  msg_info "Checking disk space for mutagen sync..."
+  
+  # Calculate required space (project size + 20% overhead)
+  local project_bytes
+  project_bytes=$(calculate_project_size)
+  
+  if [[ "$project_bytes" -eq 0 ]]; then
+    msg_warning "Could not calculate project size, skipping disk space check"
+    return 0
+  fi
+  
+  local required_bytes=$((project_bytes * 120 / 100))
+  
+  # Check available space in Docker volume
+  local volume_name="${DC_ORO_NAME:-}_appcode"
+  local available_bytes
+  available_bytes=$(check_volume_disk_space "$volume_name")
+  
+  if [[ "$available_bytes" -eq 0 ]]; then
+    msg_warning "Could not check available disk space, skipping check"
+    return 0
+  fi
+  
+  # Compare required vs available
+  if [[ "$available_bytes" -lt "$required_bytes" ]]; then
+    local required_human=$(bytes_to_human "$required_bytes")
+    local available_human=$(bytes_to_human "$available_bytes")
+    msg_error "Insufficient disk space for mutagen sync"
+    msg_error "Required: ${required_human}, Available: ${available_human}"
+    msg_error "Set DC_ORO_SKIP_DISK_CHECK=1 to bypass this check"
+    return 1
+  fi
+  
+  local required_human=$(bytes_to_human "$required_bytes")
+  local available_human=$(bytes_to_human "$available_bytes")
+  msg_ok "Disk space check passed (Required: ${required_human}, Available: ${available_human})"
+  return 0
+}
+
+# Main disk space check function for sync operations
+# Usage: check_sync_disk_space
+# Returns: 0 if sufficient space or not needed, 1 if insufficient
+check_sync_disk_space() {
+  local mode="${DC_ORO_MODE:-default}"
+  
+  # Skip if default mode (no sync)
+  if [[ "$mode" == "default" ]]; then
+    return 0
+  fi
+  
+  # Skip if bypass flag set
+  if [[ "${DC_ORO_SKIP_DISK_CHECK:-}" == "1" ]]; then
+    return 0
+  fi
+  
+  # Check based on sync mode
+  if [[ "$mode" == "mutagen" ]]; then
+    check_mutagen_sync_disk_space
+    return $?
+  elif [[ "$mode" == "ssh" ]]; then
+    check_rsync_sync_disk_space
+    return $?
+  fi
+  
+  # Unknown mode, skip check
+  return 0
+}
+
 # Handle compose up command with separate build and start phases
 # Usage: handle_compose_up
 # Expects: docker_services, left_flags, left_options, right_flags, right_options
@@ -105,6 +367,11 @@ handle_compose_up() {
     if [[ "$skip_build" == "false" ]]; then
       build_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} build ${docker_services}"
       eval "$build_cmd" || exit $?
+    fi
+
+    # Check disk space before starting sync operations (mutagen/rsync modes)
+    if ! check_sync_disk_space; then
+      exit 1
     fi
 
     # Phase 2: Start services
@@ -128,6 +395,12 @@ handle_compose_up() {
   if [[ "$skip_build" == "false" ]]; then
     build_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} build ${docker_services}"
     DC_ORO_NAME="$DC_ORO_NAME" run_with_spinner "Building services" "$build_cmd" || exit $?
+  fi
+
+  # Check disk space before starting sync operations (mutagen/rsync modes)
+  # This check happens after build but before containers start
+  if ! check_sync_disk_space; then
+    exit 1
   fi
 
   # Phase 2: Start services

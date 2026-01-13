@@ -196,6 +196,8 @@ if [[ "$*" == *"-d"* ]]; then
   msg_info ""
   msg_info "Bind address: ${TRAEFIK_BIND_ADDRESS:-127.0.0.1}"
   msg_info "Dashboard:    http://${TRAEFIK_BIND_ADDRESS:-127.0.0.1}:8880/traefik/dashboard/"
+  msg_info "              http://traefik.docker.local (via SOCKS5)"
+  msg_info "              http://proxy.docker.local (via SOCKS5)"
   msg_info "Proxy HTTP:   http://${TRAEFIK_BIND_ADDRESS:-127.0.0.1}:8880"
   msg_info "Proxy HTTPS:  https://${TRAEFIK_BIND_ADDRESS:-127.0.0.1}:8443"
   msg_info "SOCKS5:       ${TRAEFIK_BIND_ADDRESS:-127.0.0.1}:${DC_PROXY_SOCKS5_PORT:-1080}"
@@ -206,6 +208,20 @@ if [[ "$*" == *"-d"* ]]; then
   msg_info ""
 else
   # Foreground mode - show full output
+  # Show dashboard info before starting (containers will start and keep running)
+  msg_info ""
+  msg_info "Proxy will be available at:"
+  msg_info "  Bind address: ${TRAEFIK_BIND_ADDRESS:-127.0.0.1}"
+  msg_info "  Dashboard:    http://${TRAEFIK_BIND_ADDRESS:-127.0.0.1}:8880/traefik/dashboard/"
+  msg_info "                http://traefik.docker.local (via SOCKS5)"
+  msg_info "                http://proxy.docker.local (via SOCKS5)"
+  msg_info "  Proxy HTTP:   http://${TRAEFIK_BIND_ADDRESS:-127.0.0.1}:8880"
+  msg_info "  Proxy HTTPS:  https://${TRAEFIK_BIND_ADDRESS:-127.0.0.1}:8443"
+  msg_info "  SOCKS5:       ${TRAEFIK_BIND_ADDRESS:-127.0.0.1}:${DC_PROXY_SOCKS5_PORT:-1080}"
+  msg_info ""
+  msg_info "Starting proxy services (press Ctrl+C to stop)..."
+  msg_info ""
+  
   ${DOCKER_COMPOSE_BIN} -p proxy -f "$PROXY_COMPOSE_FILE" up "$@" || {
     msg_error "Failed to start proxy services"
     exit 1

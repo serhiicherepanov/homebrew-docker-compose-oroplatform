@@ -48,8 +48,8 @@ services:
       traefik.http.routers.traefik-api-path.middlewares: "traefik-api-stripprefix"
       traefik.http.middlewares.traefik-api-stripprefix.stripprefix.prefixes: "/traefik"
       
-      # Dashboard access via Host (for proxy.docker.local via SOCKS5)
-      traefik.http.routers.traefik-api-host.rule: 'Host(`proxy.docker.local`)'
+      # Dashboard access via Host (for proxy.docker.local and traefik.docker.local via SOCKS5)
+      traefik.http.routers.traefik-api-host.rule: 'Host(`proxy.docker.local`) || Host(`traefik.docker.local`)'
       traefik.http.routers.traefik-api-host.priority: 9000
       traefik.http.routers.traefik-api-host.entrypoints: "web"
       traefik.http.routers.traefik-api-host.service: "api@internal"
@@ -61,13 +61,13 @@ services:
       traefik.http.routers.traefik-api-path-default.service: "api@internal"
       traefik.http.routers.traefik-api-path-default.middlewares: "traefik-api-stripprefix"
       
-      traefik.http.routers.traefik-api-host-default.rule: 'Host(`proxy.docker.local`)'
+      traefik.http.routers.traefik-api-host-default.rule: 'Host(`proxy.docker.local`) || Host(`traefik.docker.local`)'
       traefik.http.routers.traefik-api-host-default.priority: 9000
       traefik.http.routers.traefik-api-host-default.entrypoints: "default"
       traefik.http.routers.traefik-api-host-default.service: "api@internal"
       
       # DNS sync (auto-updates /etc/hosts inside proxy container)
-      orodc.dns.hostname: 'proxy.docker.local'
+      orodc.dns.hostname: 'proxy.docker.local,traefik.docker.local'
     healthcheck:
       test: traefik healthcheck --ping
       start_period: 5s

@@ -459,7 +459,7 @@ initialize_environment() {
 
     # Determine project name for global config lookup
     local project_name=$(basename "$DC_ORO_APPDIR")
-    if [[ "$project_name" == "$HOME" ]] || [[ -z "$project_name" ]] || [[ "$project_name" == "/" ]]; then
+    if [[ "$DC_ORO_APPDIR" == "$HOME" ]] || [[ "$DC_ORO_APPDIR" == "/" ]] || [[ -z "$project_name" ]] || [[ "$project_name" == "/" ]]; then
       project_name="default"
     fi
     local global_config_file="${HOME}/.config/orodc/${project_name}.env.orodc"
@@ -475,11 +475,15 @@ initialize_environment() {
     if [[ -f "$global_config_file" ]]; then
       debug_log "initialize_environment: loading global config: $global_config_file"
       load_env_safe "$global_config_file"
+    else
+      debug_log "initialize_environment: global config not found: $global_config_file"
     fi
     # Local config is loaded last (higher priority, overrides global)
     if [[ -f "$local_config_file" ]]; then
       debug_log "initialize_environment: loading local config: $local_config_file"
       load_env_safe "$local_config_file"
+    else
+      debug_log "initialize_environment: local config not found: $local_config_file"
     fi
     
     # CRITICAL: Normalize variables AFTER loading all .env files

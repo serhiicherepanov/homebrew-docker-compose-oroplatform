@@ -26,7 +26,7 @@ fi
 
 # Determine project name from project directory (same logic as initialize_environment)
 PROJECT_NAME=$(basename "$PROJECT_DIR")
-if [[ "$PROJECT_NAME" == "$HOME" ]] || [[ -z "$PROJECT_NAME" ]] || [[ "$PROJECT_NAME" == "/" ]]; then
+if [[ "$PROJECT_DIR" == "$HOME" ]] || [[ "$PROJECT_DIR" == "/" ]] || [[ -z "$PROJECT_NAME" ]] || [[ "$PROJECT_NAME" == "/" ]]; then
   PROJECT_NAME="default"
 fi
 

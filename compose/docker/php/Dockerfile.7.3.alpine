@@ -105,9 +105,7 @@ RUN set -eux; \
   rm -rf /usr/src/php/ext/xdebug; \
   \
   mkdir -p /usr/src/php/ext/yaml; \
-  git clone https://github.com/php/pecl-file_formats-yaml.git /usr/src/php/ext/yaml && \
-  cd /usr/src/php/ext/yaml && \
-  git checkout $EXT_YAML_VERSION && \
+  curl -fsSL https://github.com/php/pecl-file_formats-yaml/archive/refs/tags/$EXT_YAML_VERSION.tar.gz | tar xvz -C /usr/src/php/ext/yaml --strip 1; \
   docker-php-ext-configure yaml; \
   docker-php-ext-install -j$(printf "2\n$(nproc)" | sort -g | head -n1) yaml; \
   rm -rf /usr/src/php/ext/yaml; \

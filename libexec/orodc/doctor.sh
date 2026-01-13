@@ -1608,6 +1608,10 @@ run_goss_checks_from_cli() {
     # Check if container exists and is running
     if [[ "$normalized_status" == *"not found"* ]] || [[ -z "$status" ]] || [[ "$status" == "unknown" ]]; then
       test_result="SKIP"
+    elif [[ "$normalized_status" == *"restarting"* ]]; then
+      # Container is restarting - this is a problem state, mark as FAIL
+      test_result="FAIL"
+      overall_failed=1
     elif [[ "$normalized_status" == *"exited"* ]] || [[ "$normalized_status" == *"stopped"* ]]; then
       # Container exists but is stopped - skip test
       test_result="SKIP"

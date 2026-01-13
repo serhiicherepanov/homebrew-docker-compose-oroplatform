@@ -328,7 +328,17 @@ if [[ -f ".env.orodc" ]] && [[ -n "${DC_ORO_CONFIG_DIR:-}" ]] && [[ -d "${DC_ORO
     # Build only services that use Dockerfile.project (fpm, cli, consumer, websocket, ssh)
     if [[ -n "${DOCKER_COMPOSE_BIN_CMD:-}" ]]; then
       BUILD_START=$(date +%s)
-      build_cmd="${DOCKER_COMPOSE_BIN_CMD} build ${NO_CACHE_FLAG} fpm cli consumer websocket ssh"
+      
+      # Check which services exist before building
+      # Consumer is only available for Oro projects (docker-compose-consumer.yml)
+      services_to_build="fpm cli websocket ssh"
+      
+      # Check if consumer service exists in compose config
+      if ${DOCKER_COMPOSE_BIN_CMD} config --services 2>/dev/null | grep -q "^consumer$"; then
+        services_to_build="${services_to_build} consumer"
+      fi
+      
+      build_cmd="${DOCKER_COMPOSE_BIN_CMD} build ${NO_CACHE_FLAG} ${services_to_build}"
       if run_with_spinner "Building project images" "$build_cmd"; then
         BUILD_END=$(date +%s)
         BUILD_DURATION=$((BUILD_END - BUILD_START))

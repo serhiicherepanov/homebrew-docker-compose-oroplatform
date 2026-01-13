@@ -725,6 +725,30 @@ initialize_environment() {
       debug_log "initialize_environment: DC_ORO_DATABASE_SCHEMA not set, skipping database-specific compose file"
     fi
 
+    # Add consumer compose file for Oro projects
+    # Source common.sh to get is_oro_project function
+    local common_sh_path=""
+    if [[ -n "${SCRIPT_DIR:-}" ]] && [[ -f "${SCRIPT_DIR}/lib/common.sh" ]]; then
+      common_sh_path="${SCRIPT_DIR}/lib/common.sh"
+    elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/common.sh" ]]; then
+      common_sh_path="$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    fi
+    
+    if [[ -n "$common_sh_path" ]]; then
+      source "$common_sh_path" 2>/dev/null || true
+    fi
+    
+    if is_oro_project 2>/dev/null; then
+      if [[ -f "${DC_ORO_CONFIG_DIR}/docker-compose-consumer.yml" ]]; then
+        DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-consumer.yml"
+        debug_log "initialize_environment: added docker-compose-consumer.yml (Oro project detected)"
+      else
+        debug_log "initialize_environment: docker-compose-consumer.yml not found (Oro project detected)"
+      fi
+    else
+      debug_log "initialize_environment: skipping docker-compose-consumer.yml (not an Oro project)"
+    fi
+
     # Add user custom compose file if exists
     if [[ -f "${DC_ORO_APPDIR}/.docker-compose.user.yml" ]]; then
       DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_APPDIR}/.docker-compose.user.yml"

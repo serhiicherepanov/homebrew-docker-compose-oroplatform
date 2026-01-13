@@ -1393,6 +1393,18 @@ get_container_info() {
   return 1
 }
 
+# Get container healthcheck status
+get_container_health_status() {
+  local container_name="$1"
+  
+  # Try to get healthcheck status from docker inspect
+  local health_status
+  health_status=$(docker inspect "$container_name" --format '{{.State.Health.Status}}' 2>/dev/null || echo "")
+  
+  # Return health status: "healthy", "unhealthy", "starting", or empty string (no healthcheck)
+  echo "${health_status}"
+}
+
 # Run Goss checks for a single service from CLI container
 # Returns: 0 on success, 1 on failure
 # Outputs: writes test output to log file, returns log file path via global variable
@@ -1597,6 +1609,12 @@ run_goss_checks_from_cli() {
       status="${status:-not found}"
     fi
     
+    # Check healthcheck status if container exists
+    local health_status=""
+    if [[ "$status" != "not found" ]] && [[ -n "$container_name" ]]; then
+      health_status=$(get_container_health_status "$container_name" 2>/dev/null || echo "")
+    fi
+    
     # Run test (silent mode when showing table)
     local test_result="SKIP"
     local log_file=""
@@ -1608,6 +1626,15 @@ run_goss_checks_from_cli() {
     # Check if container exists and is running
     if [[ "$normalized_status" == *"not found"* ]] || [[ -z "$status" ]] || [[ "$status" == "unknown" ]]; then
       test_result="SKIP"
+    elif [[ "$normalized_status" == *"restarting"* ]]; then
+      # Container is restarting - this is a problem state, mark as FAIL
+      test_result="FAIL"
+      overall_failed=1
+    elif [[ -n "$health_status" ]] && [[ "$health_status" != "healthy" ]]; then
+      # Container has healthcheck but is not healthy (unhealthy or starting) - mark as FAIL
+      # If healthcheck exists, container must be healthy for tests to pass
+      test_result="FAIL"
+      overall_failed=1
     elif [[ "$normalized_status" == *"exited"* ]] || [[ "$normalized_status" == *"stopped"* ]]; then
       # Container exists but is stopped - skip test
       test_result="SKIP"

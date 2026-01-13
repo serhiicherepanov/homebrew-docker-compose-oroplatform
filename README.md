@@ -173,7 +173,8 @@ orodc exec bin/magento setup:di:compile
 orodc exec bin/magento cache:flush
 
 # 9. Disable Two-Factor Authentication (2FA) for development
-orodc exec bin/magento config:set twofactorauth/general/enable 0
+orodc exec bin/magento module:disable Magento_AdminAdobeImsTwoFactorAuth Magento_TwoFactorAuth
+orodc exec bin/magento setup:upgrade
 orodc exec bin/magento cache:flush
 
 # Access your Magento installation
@@ -203,7 +204,8 @@ orodc exec bin/magento indexer:reindex
 orodc exec bin/magento deploy:mode:set developer
 
 # Disable Two-Factor Authentication (2FA)
-orodc exec bin/magento config:set twofactorauth/general/enable 0
+orodc exec bin/magento module:disable Magento_AdminAdobeImsTwoFactorAuth Magento_TwoFactorAuth
+orodc exec bin/magento setup:upgrade
 orodc exec bin/magento cache:flush
 ```
 

@@ -172,11 +172,17 @@ orodc exec bin/magento setup:di:compile
 # 8. Clear cache
 orodc exec bin/magento cache:flush
 
+# 9. Disable Two-Factor Authentication (2FA) for development
+orodc exec bin/magento config:set twofactorauth/general/enable 0
+orodc exec bin/magento cache:flush
+
 # Access your Magento installation
 # Frontend: https://magento2.docker.local
 # Admin: https://magento2.docker.local/admin
 # Admin credentials: admin / Admin123456
 ```
+
+**Note:** If you see "You need to configure Two-Factor Authorization" message after login, disable 2FA using the command above.
 
 **Key Magento Commands:**
 ```bash
@@ -195,6 +201,10 @@ orodc exec bin/magento indexer:reindex
 
 # Enable developer mode
 orodc exec bin/magento deploy:mode:set developer
+
+# Disable Two-Factor Authentication (2FA)
+orodc exec bin/magento config:set twofactorauth/general/enable 0
+orodc exec bin/magento cache:flush
 ```
 
 ### 🚀 OroCommerce / OroPlatform Example

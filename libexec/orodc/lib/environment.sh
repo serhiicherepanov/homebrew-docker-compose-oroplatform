@@ -457,10 +457,30 @@ initialize_environment() {
   if [[ -n "$DC_ORO_APPDIR" ]]; then
     cd "$DC_ORO_APPDIR"
 
+    # Determine project name for global config lookup
+    local project_name=$(basename "$DC_ORO_APPDIR")
+    if [[ "$project_name" == "$HOME" ]] || [[ -z "$project_name" ]] || [[ "$project_name" == "/" ]]; then
+      project_name="default"
+    fi
+    local global_config_file="${HOME}/.config/orodc/${project_name}.env.orodc"
+    local local_config_file="$DC_ORO_APPDIR/.env.orodc"
+
+    # Load standard OroPlatform env files first
     load_env_safe "$DC_ORO_APPDIR/.env"
     load_env_safe "$DC_ORO_APPDIR/.env-app"
     load_env_safe "$DC_ORO_APPDIR/.env-app.local"
-    load_env_safe "$DC_ORO_APPDIR/.env.orodc"
+    
+    # Load OroDC config files with priority: local > global
+    # Global config is loaded first (lower priority)
+    if [[ -f "$global_config_file" ]]; then
+      debug_log "initialize_environment: loading global config: $global_config_file"
+      load_env_safe "$global_config_file"
+    fi
+    # Local config is loaded last (higher priority, overrides global)
+    if [[ -f "$local_config_file" ]]; then
+      debug_log "initialize_environment: loading local config: $local_config_file"
+      load_env_safe "$local_config_file"
+    fi
     
     # CRITICAL: Normalize variables AFTER loading all .env files
     # This ensures orodc is the source of truth and overrides any external values

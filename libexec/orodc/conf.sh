@@ -10,6 +10,11 @@ source "${SCRIPT_DIR}/lib/environment.sh"
 
 # Check if running in interactive mode
 is_interactive() {
+  # If called from interactive menu, always use interactive mode
+  if [[ -n "${ORODC_IS_INTERACTIVE_MENU:-}" ]]; then
+    return 0
+  fi
+  # Otherwise check if stdin/stdout are TTYs
   [ -t 0 ] && [ -t 1 ]
 }
 
@@ -98,7 +103,8 @@ manage_domains_interactive() {
       msg_ok "Removed domain: $domain_to_remove" >&2
     else
       # Add domain
-      local new_domain=$(echo "$input" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      local new_domain
+      new_domain=$(echo "$input" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
       
       if [[ -z "$new_domain" ]]; then
         continue
@@ -137,7 +143,8 @@ manage_domains_interactive() {
   
   # Update .env.orodc
   if [[ ${#domains[@]} -gt 0 ]]; then
-    local domains_str=$(IFS=','; echo "${domains[*]}")
+    local domains_str
+    domains_str=$(IFS=','; echo "${domains[*]}")
     update_env_file "DC_ORO_EXTRA_HOSTS" "$domains_str"
     msg_ok "Updated domains in .env.orodc" >&2
   else
@@ -193,7 +200,8 @@ manage_domains_noninteractive() {
       done
       
       domains+=("$domain")
-      local domains_str=$(IFS=','; echo "${domains[*]}")
+      local domains_str
+      domains_str=$(IFS=','; echo "${domains[*]}")
       update_env_file "DC_ORO_EXTRA_HOSTS" "$domains_str"
       msg_ok "Added domain: $domain"
       ;;
@@ -228,7 +236,8 @@ manage_domains_noninteractive() {
       fi
       
       if [[ ${#new_domains[@]} -gt 0 ]]; then
-        local domains_str=$(IFS=','; echo "${new_domains[*]}")
+        local domains_str
+        domains_str=$(IFS=','; echo "${new_domains[*]}")
         update_env_file "DC_ORO_EXTRA_HOSTS" "$domains_str"
       else
         local env_file="${DC_ORO_APPDIR}/.env.orodc"

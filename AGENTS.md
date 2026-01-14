@@ -404,6 +404,56 @@ version "1.0.0"
 **Remember: Version first, branch first, commit later! 📦🌳**
 ---
 
+# 🔴 **CRITICAL: Shellcheck is Mandatory**
+
+**⚡ MANDATORY RULE: NO CODE CHANGES WITHOUT SHELLCHECK!**
+
+**🚨 WHEN EDITING OR CREATING BASH SCRIPTS:**
+
+- **MUST** use `shellcheck` together with `read_lints` for ALL `.sh` files
+- **MUST** run `shellcheck` on ALL Bash scripts before committing
+- **MUST** fix ALL shellcheck warnings (unless explicitly false positives)
+- **MUST** check syntax with `bash -n script.sh` before committing
+- **MUST** run `shellcheck script.sh` after making ANY changes to Bash files
+- **MUST** also run `read_lints` for bash scripts - use both tools together
+- **MUST NOT** commit code without running shellcheck first
+
+**⛔ WITHOUT SHELLCHECK - DO NOTHING:**
+- ❌ Do not make changes to Bash scripts
+- ❌ Do not commit Bash script changes
+- ❌ Do not skip shellcheck "because it's not available"
+- ❌ Do not proceed with code changes if shellcheck fails
+
+**✅ MANDATORY WORKFLOW:**
+```bash
+# 1. Make changes to Bash script
+# 2. ALWAYS run shellcheck
+shellcheck libexec/orodc/lib/environment.sh
+
+# 3. Fix ALL warnings
+# 4. Run shellcheck again to verify
+shellcheck libexec/orodc/lib/environment.sh
+
+# 5. Check syntax
+bash -n libexec/orodc/lib/environment.sh
+
+# 6. ONLY THEN commit
+```
+
+**🔥 CRITICAL RULE:**
+- If shellcheck is not available in system, **INSTALL IT FIRST** before making any changes
+- Do not proceed with code changes without shellcheck validation
+- Shellcheck warnings are errors - fix them before committing
+- Only exception: SC1091 (source file not found) is informational and can be ignored
+
+**Why this is critical:**
+- Prevents shell script bugs and security issues
+- Ensures code quality and consistency
+- Catches common mistakes before they reach production
+- Required for maintaining codebase quality standards
+
+---
+
 # 📋 **AI AGENT RESPONSE GUIDELINES**
 
 ## Always Include:

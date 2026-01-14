@@ -361,9 +361,9 @@ import_database_interactive() {
     # 2. String values in SQL: 'domain' or "domain" (inside quotes)
     # 3. Domain as standalone value (surrounded by spaces, quotes, or end of line)
     # Avoid replacing in: #!/bin/bash, comments starting with --, etc.
-    # Use sed with address range to skip lines starting with # or !
-    # Pattern: /^[[:space:]]*[#!]/! means "apply to lines that DON'T start with # or !"
-    DOMAIN_REPLACE_SED="sed -E '/^[[:space:]]*[#!]/! { s|https://${FROM_DOMAIN_ESC}|https://${TO_DOMAIN_ESC}|g; s|http://${FROM_DOMAIN_ESC}|http://${TO_DOMAIN_ESC}|g; s|${FROM_DOMAIN_ESC}|${TO_DOMAIN_ESC}|g; }' |"
+    # Remove lines starting with #!/ (shebang lines) - these are not valid SQL
+    # Then skip lines starting with # or ! (comments), then apply domain replacement
+    DOMAIN_REPLACE_SED="sed -E '/^[[:space:]]*#!/d' | sed -E '/^[[:space:]]*[#!]/! { s|https://${FROM_DOMAIN_ESC}|https://${TO_DOMAIN_ESC}|g; s|http://${FROM_DOMAIN_ESC}|http://${TO_DOMAIN_ESC}|g; s|${FROM_DOMAIN_ESC}|${TO_DOMAIN_ESC}|g; }' |"
     msg_info "Domain replacement: ${FROM_DOMAIN} -> ${TO_DOMAIN}"
   fi
 

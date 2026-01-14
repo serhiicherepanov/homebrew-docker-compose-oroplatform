@@ -185,6 +185,38 @@ git checkout -b feature/your-branch-name
 
 ---
 
+# 🚫 **CRITICAL: NEVER RESET CHANGES - USE STASH INSTEAD!**
+
+**⛔ ABSOLUTELY FORBIDDEN:**
+```bash
+# NEVER DO THIS! DATA LOSS!
+git reset --hard
+git checkout -- .
+git clean -fd
+```
+
+**✅ ALWAYS USE STASH:**
+```bash
+# ✅ CORRECT: Save changes temporarily
+git stash push -m "Description of changes"
+
+# Later restore:
+git stash pop
+# Or list and apply specific stash:
+git stash list
+git stash apply stash@{0}
+```
+
+**Why this rule exists:**
+- 🛡️ **Prevents Data Loss**: Stash preserves all uncommitted changes
+- 🔄 **Reversible**: Can always restore stashed changes
+- 📝 **Trackable**: Stash list shows all saved changes
+- 🚫 **Reset is Destructive**: Cannot recover reset changes
+
+**Exception:** Only use reset if user explicitly requests it AND confirms data loss.
+
+---
+
 # 🚫 **CRITICAL: NEVER PUSH DIRECTLY TO MASTER/MAIN!**
 
 **⛔ ABSOLUTELY FORBIDDEN:**

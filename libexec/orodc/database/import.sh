@@ -18,8 +18,8 @@ TO_DOMAIN=""
 REMAINING_ARGS=()
 
 # Parse arguments for --from-domain and --to-domain
-i=0
-while [[ $i -lt $# ]]; do
+i=1
+while [[ $i -le $# ]]; do
   arg="${!i}"
   next_i=$((i + 1))
   next_arg="${!next_i:-}"
@@ -371,16 +371,16 @@ import_database_interactive() {
   if [[ $DC_ORO_DATABASE_SCHEMA == "pdo_pgsql" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "postgres" ]];then
     # PostgreSQL import command
     if echo ${DB_DUMP_BASENAME} | grep -i 'sql\.gz$' > /dev/null; then
-      DB_IMPORT_CMD="zcat /${DB_DUMP_BASENAME} | ${DOMAIN_REPLACE_SED} sed -E 's/^[[:space:]]*[Cc][Rr][Ee][Aa][Tt][Ee][[:space:]]+[Ff][Uu][Nn][Cc][Tt][Ii][Oo][Nn]/CREATE OR REPLACE FUNCTION/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr]:[[:space:]]*[a-zA-Z0-9_]+/Owner: ${db_user}/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr][[:space:]]+[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+/OWNER TO ${db_user}/g' | sed -E 's/[Ff][Oo][Rr][[:space:]]+[Rr][Oo][Ll][Ee][[:space:]]+[a-zA-Z0-9_]+/FOR ROLE ${db_user}/g' | sed -E 's/[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+;/TO ${db_user};/g' | sed -E '/^[[:space:]]*[Rr][Ee][Vv][Oo][Kk][Ee][[:space:]]+[Aa][Ll][Ll]/d' | sed -e '/SET transaction_timeout = 0;/d' | sed -E '/[\\]restrict|[\\]unrestrict/d' | PGPASSWORD='${db_password}' psql --set ON_ERROR_STOP=on -h '${db_host}' -p '${db_port}' -U '${db_user}' -d '${db_name}' -1 >/dev/null"
+      DB_IMPORT_CMD="zcat /dump.sql.gz | ${DOMAIN_REPLACE_SED} sed -E 's/^[[:space:]]*[Cc][Rr][Ee][Aa][Tt][Ee][[:space:]]+[Ff][Uu][Nn][Cc][Tt][Ii][Oo][Nn]/CREATE OR REPLACE FUNCTION/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr]:[[:space:]]*[a-zA-Z0-9_]+/Owner: ${db_user}/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr][[:space:]]+[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+/OWNER TO ${db_user}/g' | sed -E 's/[Ff][Oo][Rr][[:space:]]+[Rr][Oo][Ll][Ee][[:space:]]+[a-zA-Z0-9_]+/FOR ROLE ${db_user}/g' | sed -E 's/[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+;/TO ${db_user};/g' | sed -E '/^[[:space:]]*[Rr][Ee][Vv][Oo][Kk][Ee][[:space:]]+[Aa][Ll][Ll]/d' | sed -e '/SET transaction_timeout = 0;/d' | sed -E '/[\\]restrict|[\\]unrestrict/d' | PGPASSWORD='${db_password}' psql --set ON_ERROR_STOP=on -h '${db_host}' -p '${db_port}' -U '${db_user}' -d '${db_name}' -1 >/dev/null"
     else
-      DB_IMPORT_CMD="cat /${DB_DUMP_BASENAME} | ${DOMAIN_REPLACE_SED} sed -E 's/^[[:space:]]*[Cc][Rr][Ee][Aa][Tt][Ee][[:space:]]+[Ff][Uu][Nn][Cc][Tt][Ii][Oo][Nn]/CREATE OR REPLACE FUNCTION/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr]:[[:space:]]*[a-zA-Z0-9_]+/Owner: ${db_user}/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr][[:space:]]+[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+/OWNER TO ${db_user}/g' | sed -E 's/[Ff][Oo][Rr][[:space:]]+[Rr][Oo][Ll][Ee][[:space:]]+[a-zA-Z0-9_]+/FOR ROLE ${db_user}/g' | sed -E 's/[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+;/TO ${db_user};/g' | sed -E '/^[[:space:]]*[Rr][Ee][Vv][Oo][Kk][Ee][[:space:]]+[Aa][Ll][Ll]/d' | sed -e '/SET transaction_timeout = 0;/d' | sed -E '/[\\]restrict|[\\]unrestrict/d' | PGPASSWORD='${db_password}' psql --set ON_ERROR_STOP=on -h '${db_host}' -p '${db_port}' -U '${db_user}' -d '${db_name}' -1 >/dev/null"
+      DB_IMPORT_CMD="cat /dump.sql | ${DOMAIN_REPLACE_SED} sed -E 's/^[[:space:]]*[Cc][Rr][Ee][Aa][Tt][Ee][[:space:]]+[Ff][Uu][Nn][Cc][Tt][Ii][Oo][Nn]/CREATE OR REPLACE FUNCTION/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr]:[[:space:]]*[a-zA-Z0-9_]+/Owner: ${db_user}/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr][[:space:]]+[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+/OWNER TO ${db_user}/g' | sed -E 's/[Ff][Oo][Rr][[:space:]]+[Rr][Oo][Ll][Ee][[:space:]]+[a-zA-Z0-9_]+/FOR ROLE ${db_user}/g' | sed -E 's/[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+;/TO ${db_user};/g' | sed -E '/^[[:space:]]*[Rr][Ee][Vv][Oo][Kk][Ee][[:space:]]+[Aa][Ll][Ll]/d' | sed -e '/SET transaction_timeout = 0;/d' | sed -E '/[\\]restrict|[\\]unrestrict/d' | PGPASSWORD='${db_password}' psql --set ON_ERROR_STOP=on -h '${db_host}' -p '${db_port}' -U '${db_user}' -d '${db_name}' -1 >/dev/null"
     fi
   elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_mysql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]];then
     # MySQL import command
     if echo ${DB_DUMP_BASENAME} | grep -i 'sql\.gz$' > /dev/null; then
-      DB_IMPORT_CMD="zcat /${DB_DUMP_BASENAME} | ${DOMAIN_REPLACE_SED} sed -E 's/[Dd][Ee][Ff][Ii][Nn][Ee][Rr][ ]*=[ ]*[^*]*\*/DEFINER=CURRENT_USER \*/' | MYSQL_PWD='${db_password}' mysql -h'${db_host}' -P'${db_port}' -u'${db_user}' '${db_name}'"
+      DB_IMPORT_CMD="zcat /dump.sql.gz | ${DOMAIN_REPLACE_SED} sed -E 's/[Dd][Ee][Ff][Ii][Nn][Ee][Rr][ ]*=[ ]*[^*]*\*/DEFINER=CURRENT_USER \*/' | MYSQL_PWD='${db_password}' mysql -h'${db_host}' -P'${db_port}' -u'${db_user}' '${db_name}'"
     else
-      DB_IMPORT_CMD="cat /${DB_DUMP_BASENAME} | ${DOMAIN_REPLACE_SED} sed -E 's/[Dd][Ee][Ff][Ii][Nn][Ee][Rr][ ]*=[ ]*[^*]*\*/DEFINER=CURRENT_USER \*/' | MYSQL_PWD='${db_password}' mysql -h'${db_host}' -P'${db_port}' -u'${db_user}' '${db_name}'"
+      DB_IMPORT_CMD="cat /dump.sql | ${DOMAIN_REPLACE_SED} sed -E 's/[Dd][Ee][Ff][Ii][Nn][Ee][Rr][ ]*=[ ]*[^*]*\*/DEFINER=CURRENT_USER \*/' | MYSQL_PWD='${db_password}' mysql -h'${db_host}' -P'${db_port}' -u'${db_user}' '${db_name}'"
     fi
   else
     msg_error "Unknown database schema: ${DC_ORO_DATABASE_SCHEMA}"
@@ -392,7 +392,13 @@ import_database_interactive() {
   msg_info "File size: $(du -h "$DB_DUMP" | cut -f1)"
   msg_info "Database: ${db_host}:${db_port}/${db_name}"
 
-  import_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} run --quiet -i --rm -v \"${DB_DUMP}:/${DB_DUMP_BASENAME}\" database-cli bash -c \"$DB_IMPORT_CMD\""
+  # Mount SQL dump file to /dump.sql or /dump.sql.gz in container
+  local dump_mount_path="/dump.sql"
+  if echo ${DB_DUMP_BASENAME} | grep -i 'sql\.gz$' > /dev/null; then
+    dump_mount_path="/dump.sql.gz"
+  fi
+  
+  import_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} run --quiet -i --rm -v \"${DB_DUMP}:${dump_mount_path}\" database-cli bash -c \"$DB_IMPORT_CMD\""
   run_with_spinner "Importing database" "$import_cmd" || return $?
 
   msg_ok "Database imported successfully"

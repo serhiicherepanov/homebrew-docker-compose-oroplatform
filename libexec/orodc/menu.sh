@@ -181,7 +181,7 @@ show_interactive_menu() {
   
   # Interactive selection with arrow keys
   local selected=1
-  local total_options=21
+  local total_options=22
   local choice=""
   
   # Function to truncate text to maximum length
@@ -308,7 +308,7 @@ show_interactive_menu() {
     printf "\033[0m\033[?25h" >&2
     tput sgr0 2>/dev/null || true
     stty sane 2>/dev/null || true
-    echo -n "Use ↑↓ arrows to navigate, or type number [1-21], 'v' for VERBOSE, 'q' to quit: " >&2
+    echo -n "Use ↑↓ arrows to navigate, or type number [1-22], 'v' for VERBOSE, 'q' to quit: " >&2
     # Display input buffer if user is typing a number
     if [[ -n "$input_buf" ]]; then
       printf "%s" "$input_buf" >&2
@@ -343,6 +343,7 @@ show_interactive_menu() {
       "Add/Manage domains"
       "Configure application URL"
       "Clear cache"
+      "Reindex search"
       "Platform update"
       "Install with demo"
       "Install without demo"
@@ -404,7 +405,7 @@ show_interactive_menu() {
       render_cell 19 $((selected_option == 19))
       echo "" >&2
       
-      # Row 6: 6 (Environment), empty, 20 (Proxy)
+      # Row 6: 6 (Environment), empty, 20 (Oro Maintenance)
       render_cell 6 $((selected_option == 6))
       printf "  %-32s" "" >&2
       render_cell 20 $((selected_option == 20))
@@ -421,10 +422,10 @@ show_interactive_menu() {
       render_cell 21 $((selected_option == 21))
       echo "" >&2
       
-      # Row 8: 8 (Maintenance), empty, empty
+      # Row 8: 8 (Maintenance), empty, 22 (Proxy)
       render_cell 8 $((selected_option == 8))
       printf "  %-32s" "" >&2
-      printf "  %-32s" "" >&2
+      render_cell 22 $((selected_option == 22))
       echo "" >&2
       
       # Row 9: 9 (Maintenance), empty, empty
@@ -517,9 +518,9 @@ show_interactive_menu() {
       render_cell_2col 21 $((selected_option == 21))
       echo "" >&2
       
-      # Row 12: option 17
+      # Row 12: options 17 and 22
       render_cell_2col 17 $((selected_option == 17))
-      printf "  %-32s" "" >&2
+      render_cell_2col 22 $((selected_option == 22))
       echo "" >&2
       
       # Row 13: option 18
@@ -568,16 +569,17 @@ show_interactive_menu() {
       echo -e "\033[1;31mOro Maintenance:\033[0m" >&2
       printf "\033[0m" >&2
       render_menu_option 15 $((selected_option == 15)) "Clear cache"
-      render_menu_option 16 $((selected_option == 16)) "Platform update"
-      render_menu_option 17 $((selected_option == 17)) "Install with demo"
-      render_menu_option 18 $((selected_option == 18)) "Install without demo"
-      render_menu_option 19 $((selected_option == 19)) "Install dependencies"
+      render_menu_option 16 $((selected_option == 16)) "Reindex search"
+      render_menu_option 17 $((selected_option == 17)) "Platform update"
+      render_menu_option 18 $((selected_option == 18)) "Install with demo"
+      render_menu_option 19 $((selected_option == 19)) "Install without demo"
+      render_menu_option 20 $((selected_option == 20)) "Install dependencies"
       echo "" >&2
       printf "\033[0m" >&2
       echo -e "\033[1;37mProxy:\033[0m" >&2
       printf "\033[0m" >&2
-      render_menu_option 20 $((selected_option == 20)) "Start proxy"
-      render_menu_option 21 $((selected_option == 21)) "Stop proxy"
+      render_menu_option 21 $((selected_option == 21)) "Start proxy"
+      render_menu_option 22 $((selected_option == 22)) "Stop proxy"
       printf "\033[0m" >&2
     fi
     
@@ -672,7 +674,7 @@ show_interactive_menu() {
         fi
       fi
       # Validate number and update selection (always wait for Enter in next iteration)
-      if [[ "$num_input" =~ ^[1-9]$ ]] || [[ "$num_input" =~ ^1[0-9]$ ]] || [[ "$num_input" == "20" ]] || [[ "$num_input" == "21" ]]; then
+      if [[ "$num_input" =~ ^[1-9]$ ]] || [[ "$num_input" =~ ^1[0-9]$ ]] || [[ "$num_input" == "20" ]] || [[ "$num_input" == "21" ]] || [[ "$num_input" == "22" ]]; then
         # Update selected option to match input, wait for Enter to confirm
         selected=$num_input
         redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
@@ -951,7 +953,7 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return platform-update
+      run_command_with_menu_return search reindex
       ;;
     17)
       if ! check_in_project; then
@@ -962,7 +964,7 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return install
+      run_command_with_menu_return platform-update
       ;;
     18)
       if ! check_in_project; then
@@ -973,7 +975,7 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return install --without-demo
+      run_command_with_menu_return install
       ;;
     19)
       if ! check_in_project; then
@@ -984,12 +986,23 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return composer install
+      run_command_with_menu_return install --without-demo
       ;;
     20)
-      run_command_with_menu_return proxy up -d
+      if ! check_in_project; then
+        msg_error "Not in project directory (exit code: 1)" >&2
+        echo "" >&2
+        echo -n "Press Enter to continue..." >&2
+        read -r
+        show_interactive_menu
+        return
+      fi
+      run_command_with_menu_return composer install
       ;;
     21)
+      run_command_with_menu_return proxy up -d
+      ;;
+    22)
       run_command_with_menu_return proxy down
       ;;
     v|V)

@@ -583,6 +583,84 @@ orodc script.php
 orodc cli php --version
 ```
 
+## OroCommerce Search Reindex Commands (CRITICAL)
+
+**OroCommerce has TWO separate search systems:**
+
+### 1. Backend Search (Admin Panel)
+- **Command:** `oro:search:reindex`
+- **Purpose:** Indexes data for admin panel search
+- **Entities:** All backend entities (Products, Orders, Customers, etc.)
+- **Usage:** Admin users searching in back office
+
+### 2. Website Search (Storefront)
+- **Command:** `oro:website-search:reindex`
+- **Purpose:** Indexes data for storefront search
+- **Entities:** Customer-facing entities (Products, Categories, etc.)
+- **Usage:** Customers searching on website
+
+### 3. OroDC Implementation
+
+**Command:** `orodc search reindex`
+
+**Behavior:** Automatically runs BOTH reindex commands sequentially:
+
+```bash
+# User runs:
+orodc search reindex
+
+# Executes:
+1. oro:search:reindex         (Backend/Admin)
+2. oro:website-search:reindex (Storefront/Website)
+```
+
+**Implementation details:**
+```bash
+# libexec/orodc/search.sh
+if [[ "$search_cmd" == "reindex" ]]; then
+  # First reindex backend search (admin panel)
+  backend_cmd="${DOCKER_COMPOSE_BIN_CMD} run --rm cli php ./bin/console oro:search:reindex $*"
+  run_with_spinner "Reindexing backend search (admin panel)" "$backend_cmd" || exit $?
+  
+  # Then reindex website search (storefront)
+  website_cmd="${DOCKER_COMPOSE_BIN_CMD} run --rm cli php ./bin/console oro:website-search:reindex $*"
+  run_with_spinner "Reindexing website search (storefront)" "$website_cmd" || exit $?
+fi
+```
+
+### 4. Key Points
+
+**✅ ALWAYS:**
+- Reindex BOTH systems when user requests "search reindex"
+- Use separate spinner messages to show which system is being indexed
+- Handle backend search first, then website search
+- Allow passing additional parameters to both commands
+
+**❌ NEVER:**
+- Reindex only one system (users expect full reindex)
+- Combine commands without clear progress indicators
+- Skip website search reindex (critical for storefront)
+
+**Why both are needed:**
+- Backend search: Admin users need to find entities in admin panel
+- Website search: Customers need to find products on storefront
+- Different indexes, different purposes, both equally important
+
+### 5. Additional Search Commands
+
+Both search systems support additional commands:
+```bash
+# Backend search
+oro:search:index <entity>        # Index specific entity
+oro:search:optimize              # Optimize search index
+
+# Website search  
+oro:website-search:index <entity>
+oro:website-search:optimize
+```
+
+**OroDC routing:** All commands use `oro:search:` prefix in routing.
+
 ## Shell Compatibility (CRITICAL)
 **All commands MUST be zsh compatible:**
 
@@ -719,6 +797,181 @@ redis-cli -h redis ping
 - User explicitly requests it (e.g., `orodc database psql` command)
 - It's a convenience wrapper that calls PHP/Node.js internally
 - It's for interactive user sessions, not automated checks
+
+---
+
+# 📦 **BINARY STRUCTURE AND PATHS (CRITICAL)**
+
+## Understanding OroDC Binary Structure
+
+**OroDC has TWO different execution contexts that affect path resolution:**
+
+### 1. **Homebrew Installation (Production)**
+
+When installed via `brew install`, the structure is:
+```
+/usr/local/Cellar/docker-compose-oroplatform/X.Y.Z/
+├── bin/
+│   └── orodc -> ../libexec/orodc-main (symlink)
+└── libexec/
+    ├── orodc-main (copy of bin/orodc from tap)
+    ├── orodc-find_free_port
+    ├── orodc-sync
+    └── orodc/ (modular structure)
+        ├── cache.sh
+        ├── search.sh
+        ├── compose.sh
+        ├── lib/
+        │   ├── common.sh
+        │   ├── ui.sh
+        │   └── environment.sh
+        └── ...
+```
+
+**Path resolution in Homebrew:**
+- `bin/orodc` is a **symlink** to `libexec/orodc-main`
+- When symlink is followed: `SCRIPT_PATH=/usr/local/Cellar/.../libexec/orodc-main`
+- `SCRIPT_DIR` becomes `.../libexec/`
+- `LIBEXEC_DIR="${SCRIPT_DIR}/orodc"` → `.../libexec/orodc/` ✅
+
+### 2. **Tap Directory (Development)**
+
+When working in tap directory for development:
+```
+homebrew-docker-compose-oroplatform/
+├── bin/
+│   ├── orodc (real file, not symlink)
+│   ├── orodc-find_free_port
+│   └── orodc-sync
+└── libexec/
+    └── orodc/ (modular structure)
+        ├── cache.sh
+        ├── search.sh
+        ├── compose.sh
+        ├── lib/
+        │   ├── common.sh
+        │   ├── ui.sh
+        │   └── environment.sh
+        └── ...
+```
+
+**Path resolution in tap:**
+- `bin/orodc` is a **real file** (not symlink)
+- `SCRIPT_PATH=/path/to/tap/bin/orodc`
+- `SCRIPT_DIR` becomes `.../bin/`
+- `LIBEXEC_DIR="${SCRIPT_DIR}/orodc"` → `.../bin/orodc` ❌ (this is a FILE, not directory!)
+- **Need different logic:** `LIBEXEC_DIR="${SCRIPT_DIR}/../libexec/orodc"` ✅
+
+### 3. **Path Resolution Logic in bin/orodc**
+
+```bash
+# Determine paths - resolve symlink to get actual installation directory
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+# Follow symlink if it is one (for Homebrew installation)
+if [ -L "$SCRIPT_PATH" ]; then
+  SCRIPT_PATH="$(readlink -f "$SCRIPT_PATH")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+
+# SCRIPT_DIR will be .../libexec (Homebrew) or .../bin (development tap)
+# Check if we're in development tap or Homebrew installation
+if [[ "$(basename "$SCRIPT_DIR")" == "bin" ]]; then
+  # Development tap - libexec is sibling directory
+  LIBEXEC_DIR="${SCRIPT_DIR}/../libexec/orodc"
+else
+  # Homebrew installation - libexec modules are in ./orodc/
+  LIBEXEC_DIR="${SCRIPT_DIR}/orodc"
+fi
+```
+
+### 4. **Formula Installation Process**
+
+**How Homebrew Formula creates the structure:**
+
+```ruby
+# Formula/docker-compose-oroplatform.rb
+
+def install
+  # Copy main orodc dispatcher script to libexec root
+  (libexec/"orodc-main").write (tap_root/"bin/orodc").read
+  (libexec/"orodc-main").chmod 0755
+  
+  # Copy entire libexec/orodc/ modular structure
+  if (tap_root/"libexec/orodc").exist?
+    cp_r (tap_root/"libexec/orodc"), libexec
+  end
+  
+  # Create bin symlink to the main dispatcher
+  bin.install_symlink libexec/"orodc-main" => "orodc"
+end
+```
+
+**Installation steps:**
+1. Copies `bin/orodc` → `libexec/orodc-main` (real file)
+2. Copies `libexec/orodc/` → `libexec/orodc/` (directory structure)
+3. Creates symlink `bin/orodc` → `libexec/orodc-main`
+
+### 5. **Key Differences Summary**
+
+| Aspect | Homebrew Install | Tap Development |
+|--------|-----------------|-----------------|
+| `bin/orodc` | Symlink → `libexec/orodc-main` | Real file |
+| `SCRIPT_PATH` after resolve | `.../libexec/orodc-main` | `.../bin/orodc` |
+| `SCRIPT_DIR` | `.../libexec/` | `.../bin/` |
+| `basename $SCRIPT_DIR` | `libexec` | `bin` |
+| `LIBEXEC_DIR` logic | `${SCRIPT_DIR}/orodc` | `${SCRIPT_DIR}/../libexec/orodc` |
+
+### 6. **CRITICAL Rules for Path Resolution**
+
+**✅ ALWAYS:**
+- Check if `SCRIPT_DIR` basename is `bin` to detect tap development
+- Use conditional logic for `LIBEXEC_DIR` based on context
+- Test both contexts when modifying path resolution
+- Follow symlinks with `readlink -f` for Homebrew installations
+
+**❌ NEVER:**
+- Assume `SCRIPT_DIR` is always the same location
+- Use hardcoded paths without checking context
+- Forget to handle both symlink and real file cases
+- Use relative paths without understanding current context
+
+### 7. **Testing in Both Contexts**
+
+**Test in tap directory (development):**
+```bash
+cd /path/to/tap
+./bin/orodc help
+./bin/orodc version
+```
+
+**Test in Homebrew installation:**
+```bash
+brew reinstall digitalspacestdio/docker-compose-oroplatform/docker-compose-oroplatform
+orodc help
+orodc version
+```
+
+### 8. **When Adding New Modules**
+
+**✅ Correct structure:**
+```bash
+# New module location
+libexec/orodc/new-module.sh
+
+# Router addition in bin/orodc
+new-module)
+  shift
+  if [[ -n "${ORODC_IS_INTERACTIVE_MENU:-}" ]]; then
+    execute_with_menu_return "${LIBEXEC_DIR}/new-module.sh" "$@"
+  else
+    exec "${LIBEXEC_DIR}/new-module.sh" "$@"
+  fi
+  ;;
+```
+
+**Path will resolve correctly in both contexts:**
+- Homebrew: `${LIBEXEC_DIR}/new-module.sh` → `.../libexec/orodc/new-module.sh`
+- Tap: `${LIBEXEC_DIR}/new-module.sh` → `.../libexec/orodc/new-module.sh`
 
 ---
 

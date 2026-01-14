@@ -258,6 +258,7 @@ show_interactive_menu() {
     local use_two_cols=$2
     local input_buf="${3:-}"
     local use_three_cols="${4:-false}"
+    local cached_status_display="${5:-}"
     
     # Clear screen
     tput clear 2>/dev/null || clear || true
@@ -270,13 +271,12 @@ show_interactive_menu() {
     # Redraw menu with selection
     display_menu_with_selection $selected_option $use_two_cols "$use_three_cols" || true
     
-    # Redraw status
+    # Redraw status (use cached value instead of recalculating)
     echo "" >&2
     printf "\033[0m" >&2
     local env_display="${DC_ORO_NAME:--}"
-    local status_display=$(calculate_status_display)
     if [[ "$env_display" != "-" ]]; then
-      echo -e "Current Environment: \033[1m${env_display}\033[0m ($status_display)" >&2
+      echo -e "Current Environment: \033[1m${env_display}\033[0m ($cached_status_display)" >&2
     else
       echo -e "Current Environment: \033[1m-\033[0m (\033[33mnot in project\033[0m)" >&2
     fi
@@ -352,186 +352,169 @@ show_interactive_menu() {
       "Stop proxy"
     )
     
+    # Helper function to render a single cell
+    render_cell() {
+      local opt_num=$1
+      local is_selected=$2
+      local text=$(format_menu_item "$opt_num" "${menu_items[$((opt_num-1))]}")
+      if [[ $is_selected -eq 1 ]]; then
+        printf "  \033[7m%-32s\033[0m\033[27m" "$text" >&2
+      else
+        printf "  %-32s" "$text" >&2
+      fi
+    }
+    
+    # Group rendering functions - each renders items for its group
+    # These can be called in different order/columns for different layouts
+    
+    render_group_environment_management() {
+      local sel=$1
+      render_cell 1 $((sel == 1))
+      render_cell 2 $((sel == 2))
+      render_cell 3 $((sel == 3))
+      render_cell 4 $((sel == 4))
+      render_cell 5 $((sel == 5))
+      render_cell 6 $((sel == 6))
+    }
+    
+    render_group_maintenance() {
+      local sel=$1
+      render_cell 7 $((sel == 7))
+      render_cell 8 $((sel == 8))
+      render_cell 9 $((sel == 9))
+    }
+    
+    render_group_database() {
+      local sel=$1
+      render_cell 10 $((sel == 10))
+      render_cell 11 $((sel == 11))
+      render_cell 12 $((sel == 12))
+    }
+    
+    render_group_configuration() {
+      local sel=$1
+      render_cell 13 $((sel == 13))
+      render_cell 14 $((sel == 14))
+    }
+    
+    render_group_oro_maintenance() {
+      local sel=$1
+      render_cell 15 $((sel == 15))
+      render_cell 16 $((sel == 16))
+      render_cell 17 $((sel == 17))
+      render_cell 18 $((sel == 18))
+      render_cell 19 $((sel == 19))
+      render_cell 20 $((sel == 20))
+    }
+    
+    render_group_proxy() {
+      local sel=$1
+      render_cell 21 $((sel == 21))
+      render_cell 22 $((sel == 22))
+    }
+    
+    # Helper to get item from group by index
+    get_group_item() {
+      local group=$1
+      local index=$2
+      local sel=$3
+      
+      case "$group" in
+        environment) render_cell $((1 + index)) $((sel == $((1 + index)))) ;;
+        maintenance) render_cell $((7 + index)) $((sel == $((7 + index)))) ;;
+        database) render_cell $((10 + index)) $((sel == $((10 + index)))) ;;
+        configuration) render_cell $((13 + index)) $((sel == $((13 + index)))) ;;
+        oro) render_cell $((15 + index)) $((sel == $((15 + index)))) ;;
+        proxy) render_cell $((21 + index)) $((sel == $((21 + index)))) ;;
+        *) printf "  %-32s" "" >&2 ;;
+      esac
+    }
+    
     if [[ "$use_three_cols" == "true" ]]; then
-      # Three column layout (34 chars per column: 2 spaces + 32 chars content)
-      # Order matches single-column layout:
+      # Three column layout - each column renders its groups independently
+      # All groups align by height with empty lines
       # Column 1: Environment Management (1-6) + Maintenance (7-9)
       # Column 2: Database (10-12) + Configuration (13-14)
-      # Column 3: Oro Maintenance (15-19) + Proxy (20-21)
+      # Column 3: Oro Maintenance (15-20) + Proxy (21-22)
+      
+      local sel=$selected_option
       printf "\033[0m" >&2
-      # Headers: pad to 32 chars (same as cells) to ensure alignment
+      
+      # Section 1: Environment (6) vs Database (3) vs Oro (6)
+      # Max height: 6, so Database needs 3 empty lines
+      
+      # Headers
       printf "  \033[1;36m%-32s\033[0m  \033[1;35m%-32s\033[0m  \033[1;31m%-32s\033[0m\n" "Environment Management:" "Database:" "Oro Maintenance:" >&2
       printf "\033[0m" >&2
       
-      # Helper function to render cell with selection
-      render_cell() {
-        local opt_num=$1
-        local is_selected=$2
-        local text=$(format_menu_item "$opt_num" "${menu_items[$((opt_num-1))]}")
-        if [[ $is_selected -eq 1 ]]; then
-          printf "  \033[7m%-32s\033[0m\033[27m" "$text" >&2
-        else
-          printf "  %-32s" "$text" >&2
-        fi
-      }
+      # Rows 1-3: All three groups have items
+      get_group_item environment 0 $sel; get_group_item database 0 $sel; get_group_item oro 0 $sel; echo "" >&2
+      get_group_item environment 1 $sel; get_group_item database 1 $sel; get_group_item oro 1 $sel; echo "" >&2
+      get_group_item environment 2 $sel; get_group_item database 2 $sel; get_group_item oro 2 $sel; echo "" >&2
       
-      # Row 1: 1 (Environment), 10 (Database), 15 (Oro Maintenance)
-      render_cell 1 $((selected_option == 1))
-      render_cell 10 $((selected_option == 10))
-      render_cell 15 $((selected_option == 15))
+      # Rows 4-6: Environment + Oro continue, Database is empty
+      get_group_item environment 3 $sel; printf "  %-32s" "" >&2; get_group_item oro 3 $sel; echo "" >&2
+      get_group_item environment 4 $sel; printf "  %-32s" "" >&2; get_group_item oro 4 $sel; echo "" >&2
+      get_group_item environment 5 $sel; printf "  %-32s" "" >&2; get_group_item oro 5 $sel; echo "" >&2
+      
+      # Empty line between sections
       echo "" >&2
       
-      # Row 2: 2 (Environment), 11 (Database), 16 (Oro Maintenance)
-      render_cell 2 $((selected_option == 2))
-      render_cell 11 $((selected_option == 11))
-      render_cell 16 $((selected_option == 16))
-      echo "" >&2
+      # Section 2: Maintenance (3) vs Configuration (2) vs Proxy (2)
+      # Max height: 3, so Configuration and Proxy need 1 empty line each
       
-      # Row 3: 3 (Environment), 12 (Database), 17 (Oro Maintenance)
-      render_cell 3 $((selected_option == 3))
-      render_cell 12 $((selected_option == 12))
-      render_cell 17 $((selected_option == 17))
-      echo "" >&2
-      
-      # Row 4: 4 (Environment), 13 (Configuration), 18 (Oro Maintenance)
-      render_cell 4 $((selected_option == 4))
-      render_cell 13 $((selected_option == 13))
-      render_cell 18 $((selected_option == 18))
-      echo "" >&2
-      
-      # Row 5: 5 (Environment), 14 (Configuration), 19 (Oro Maintenance)
-      render_cell 5 $((selected_option == 5))
-      render_cell 14 $((selected_option == 14))
-      render_cell 19 $((selected_option == 19))
-      echo "" >&2
-      
-      # Row 6: 6 (Environment), empty, 20 (Oro Maintenance)
-      render_cell 6 $((selected_option == 6))
-      printf "  %-32s" "" >&2
-      render_cell 20 $((selected_option == 20))
-      echo "" >&2
-      
-      echo "" >&2
-      printf "\033[0m" >&2
+      # Headers
       printf "  \033[1;32m%-32s\033[0m  \033[1;33m%-32s\033[0m  \033[1;37m%-32s\033[0m\n" "Maintenance:" "Configuration:" "Proxy:" >&2
       printf "\033[0m" >&2
       
-      # Row 7: 7 (Maintenance), empty, 21 (Proxy)
-      render_cell 7 $((selected_option == 7))
-      printf "  %-32s" "" >&2
-      render_cell 21 $((selected_option == 21))
-      echo "" >&2
+      # Rows 1-2: All three groups have items
+      get_group_item maintenance 0 $sel; get_group_item configuration 0 $sel; get_group_item proxy 0 $sel; echo "" >&2
+      get_group_item maintenance 1 $sel; get_group_item configuration 1 $sel; get_group_item proxy 1 $sel; echo "" >&2
       
-      # Row 8: 8 (Maintenance), empty, 22 (Proxy)
-      render_cell 8 $((selected_option == 8))
-      printf "  %-32s" "" >&2
-      render_cell 22 $((selected_option == 22))
-      echo "" >&2
-      
-      # Row 9: 9 (Maintenance), empty, empty
-      render_cell 9 $((selected_option == 9))
-      printf "  %-32s" "" >&2
-      printf "  %-32s" "" >&2
-      echo "" >&2
+      # Row 3: Only Maintenance has item, others are empty
+      get_group_item maintenance 2 $sel; printf "  %-32s" "" >&2; printf "  %-32s" "" >&2; echo "" >&2
       printf "\033[0m" >&2
     elif [[ "$use_two_cols" == "true" ]]; then
-      # Two column layout (32 chars per column)
-      # Options should be ordered left-to-right by number: 1-6, 7-9, 10-12, 13-14, 15-19, 20-21
+      # Two column layout using group functions
+      # Pairs: Environment+Maintenance, Database+Configuration, Oro+Proxy
+      
+      local sel=$selected_option
       printf "\033[0m" >&2
+      
+      # Section 1: Environment Management + Maintenance
       printf "  \033[1;36m%-32s\033[0m  \033[1;32m%-32s\033[0m\n" "Environment Management:" "Maintenance:" >&2
       printf "\033[0m" >&2
       
-      # Helper function to render cell with selection for two columns
-      render_cell_2col() {
-        local opt_num=$1
-        local is_selected=$2
-        local text=$(format_menu_item "$opt_num" "${menu_items[$((opt_num-1))]}")
-        if [[ $is_selected -eq 1 ]]; then
-          printf "  \033[7m%-32s\033[0m\033[27m" "$text" >&2
-        else
-          printf "  %-32s" "$text" >&2
-        fi
-      }
+      # Environment has 6 items, Maintenance has 3
+      get_group_item environment 0 $sel; get_group_item maintenance 0 $sel; echo "" >&2
+      get_group_item environment 1 $sel; get_group_item maintenance 1 $sel; echo "" >&2
+      get_group_item environment 2 $sel; get_group_item maintenance 2 $sel; echo "" >&2
+      get_group_item environment 3 $sel; printf "  %-32s" "" >&2; echo "" >&2
+      get_group_item environment 4 $sel; printf "  %-32s" "" >&2; echo "" >&2
+      get_group_item environment 5 $sel; printf "  %-32s" "" >&2; echo "" >&2
       
-      # Row 1: options 1 and 7 (Maintenance starts with 7)
-      render_cell_2col 1 $((selected_option == 1))
-      render_cell_2col 7 $((selected_option == 7))
+      # Section 2: Database + Configuration
       echo "" >&2
-      
-      # Row 2: options 2 and 8
-      render_cell_2col 2 $((selected_option == 2))
-      render_cell_2col 8 $((selected_option == 8))
-      echo "" >&2
-      
-      # Row 3: options 3 and 9
-      render_cell_2col 3 $((selected_option == 3))
-      render_cell_2col 9 $((selected_option == 9))
-      echo "" >&2
-      
-      # Row 4: option 4
-      render_cell_2col 4 $((selected_option == 4))
-      printf "  %-32s" "" >&2
-      echo "" >&2
-      
-      # Row 5: option 5
-      render_cell_2col 5 $((selected_option == 5))
-      printf "  %-32s" "" >&2
-      echo "" >&2
-      
-      # Row 6: option 6
-      render_cell_2col 6 $((selected_option == 6))
-      printf "  %-32s" "" >&2
-      echo "" >&2
-      
-      echo "" >&2
-      printf "\033[0m" >&2
       printf "  \033[1;35m%-32s\033[0m  \033[1;33m%-32s\033[0m\n" "Database:" "Configuration:" >&2
       printf "\033[0m" >&2
       
-      # Row 7: options 10 and 13 (Database starts with 10, Configuration starts with 13)
-      render_cell_2col 10 $((selected_option == 10))
-      render_cell_2col 13 $((selected_option == 13))
-      echo "" >&2
+      # Database has 3 items, Configuration has 2
+      get_group_item database 0 $sel; get_group_item configuration 0 $sel; echo "" >&2
+      get_group_item database 1 $sel; get_group_item configuration 1 $sel; echo "" >&2
+      get_group_item database 2 $sel; printf "  %-32s" "" >&2; echo "" >&2
       
-      # Row 8: options 11 and 14
-      render_cell_2col 11 $((selected_option == 11))
-      render_cell_2col 14 $((selected_option == 14))
+      # Section 3: Oro Maintenance + Proxy
       echo "" >&2
-      
-      # Row 9: option 12
-      render_cell_2col 12 $((selected_option == 12))
-      printf "  %-32s" "" >&2
-      echo "" >&2
-      
-      echo "" >&2
-      printf "\033[0m" >&2
       printf "  \033[1;31m%-32s\033[0m  \033[1;37m%-32s\033[0m\n" "Oro Maintenance:" "Proxy:" >&2
       printf "\033[0m" >&2
       
-      # Row 10: options 15 and 20 (Oro Maintenance left, Proxy right)
-      render_cell_2col 15 $((selected_option == 15))
-      render_cell_2col 20 $((selected_option == 20))
-      echo "" >&2
-      
-      # Row 11: options 16 and 21
-      render_cell_2col 16 $((selected_option == 16))
-      render_cell_2col 21 $((selected_option == 21))
-      echo "" >&2
-      
-      # Row 12: options 17 and 22
-      render_cell_2col 17 $((selected_option == 17))
-      render_cell_2col 22 $((selected_option == 22))
-      echo "" >&2
-      
-      # Row 13: option 18
-      render_cell_2col 18 $((selected_option == 18))
-      printf "  %-32s" "" >&2
-      echo "" >&2
-      
-      # Row 14: option 19
-      render_cell_2col 19 $((selected_option == 19))
-      printf "  %-32s" "" >&2
-      echo "" >&2
+      # Oro has 6 items, Proxy has 2
+      get_group_item oro 0 $sel; get_group_item proxy 0 $sel; echo "" >&2
+      get_group_item oro 1 $sel; get_group_item proxy 1 $sel; echo "" >&2
+      get_group_item oro 2 $sel; printf "  %-32s" "" >&2; echo "" >&2
+      get_group_item oro 3 $sel; printf "  %-32s" "" >&2; echo "" >&2
+      get_group_item oro 4 $sel; printf "  %-32s" "" >&2; echo "" >&2
+      get_group_item oro 5 $sel; printf "  %-32s" "" >&2; echo "" >&2
       printf "\033[0m" >&2
     else
       # Single column layout
@@ -596,7 +579,7 @@ show_interactive_menu() {
   local input_buffer=""
   
   # Initial display with selection
-  redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+  redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$status_display" || true
   
   # Enable raw input mode for arrow keys (without time 0 to make read blocking)
   stty -echo -icanon min 1 2>/dev/null || true
@@ -626,14 +609,14 @@ show_interactive_menu() {
             if [[ $selected -gt 1 ]]; then
               ((selected--)) || true
               input_buffer=""  # Clear input buffer when using arrows
-              redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+              redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$status_display" || true
             fi
             ;;
           B) # Down arrow
             if [[ $selected -lt $total_options ]]; then
               ((selected++)) || true
               input_buffer=""  # Clear input buffer when using arrows
-              redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+              redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$status_display" || true
             fi
             ;;
         esac
@@ -647,7 +630,7 @@ show_interactive_menu() {
       # Clear input buffer if user presses backspace
       if [[ -n "$input_buffer" ]]; then
         input_buffer=""
-        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$status_display" || true
       fi
       continue
     # Filter: only allow Latin letters and digits
@@ -677,12 +660,12 @@ show_interactive_menu() {
       if [[ "$num_input" =~ ^[1-9]$ ]] || [[ "$num_input" =~ ^1[0-9]$ ]] || [[ "$num_input" == "20" ]] || [[ "$num_input" == "21" ]] || [[ "$num_input" == "22" ]]; then
         # Update selected option to match input, wait for Enter to confirm
         selected=$num_input
-        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$status_display" || true
         # Continue loop to wait for Enter - NEVER break here
       else
         # Invalid number - clear buffer and redraw
         input_buffer=""
-        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" || true
+        redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$status_display" || true
       fi
     # Handle 'v' for VERBOSE toggle
     elif [[ "$key" == "v" ]] || [[ "$key" == "V" ]]; then

@@ -83,7 +83,7 @@ msg_info "Starting installation process..."
 
 # Recreate database container with volumes removal (with user confirmation)
 if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
-  db_name="${DC_ORO_DATABASE_DBNAME:-app}"
+  db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
   echo "" >&2
   msg_danger "This will DELETE ALL DATA in database '${db_name}'!"
   msg_danger "OroPlatform requires an empty database for installation."

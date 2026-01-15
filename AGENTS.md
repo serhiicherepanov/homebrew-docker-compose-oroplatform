@@ -750,7 +750,7 @@ fi
 **Example implementation:**
 ```bash
 if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
-  db_name="${DC_ORO_DATABASE_DBNAME:-app}"
+  db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
   if confirm_yes_no "Drop existing database '${db_name}' before installation?"; then
     # Drop database using database-cli container
     # PostgreSQL: psql -d postgres -c "DROP DATABASE IF EXISTS ..."

@@ -52,7 +52,7 @@ import_database_interactive() {
     exit 1
   fi
 
-  db_name="${DC_ORO_DATABASE_DBNAME:-app}"
+  db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
   
   # Require user to confirm dropping existing database before import
   echo "" >&2

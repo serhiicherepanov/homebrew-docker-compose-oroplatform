@@ -35,6 +35,10 @@ list_environments_json() {
   local first=true
   
   while IFS='|' read -r name path last_used; do
+    # Skip environments where path doesn't exist
+    if [[ ! -d "$path" ]]; then
+      continue
+    fi
     if [[ "$first" == "true" ]]; then
       first=false
     else
@@ -43,7 +47,7 @@ list_environments_json() {
     
     local status=$(get_environment_status "$name" "$path")
     result+="{\"name\":\"$name\",\"path\":\"$path\",\"status\":\"$status\",\"last_used\":\"$last_used\"}"
-  done < <(echo "$registry" | jq -r '.environments[] | "\(.name)|\(.path)|\(.last_used)"')
+  done < <(echo "$registry" | jq -r '.environments | sort_by(.name) | .[] | "\(.name)|\(.path)|\(.last_used)"')
   
   result+="]"
   echo "$result" | jq '.'
@@ -72,12 +76,17 @@ list_environments_table() {
   local env_statuses=()
   
   # Collect environment data
+  # Sort by name (alphabetically) before processing
   while IFS='|' read -r name path last_used; do
+    # Skip environments where path doesn't exist
+    if [[ ! -d "$path" ]]; then
+      continue
+    fi
     env_names+=("$name")
     env_paths+=("$path")
     local status=$(get_environment_status "$name" "$path")
     env_statuses+=("$status")
-  done < <(echo "$registry" | jq -r '.environments[] | "\(.name)|\(.path)|\(.last_used)"')
+  done < <(echo "$registry" | jq -r '.environments | sort_by(.name) | .[] | "\(.name)|\(.path)|\(.last_used)"')
   
   # Display table
   printf "%-30s %-12s %s\n" "NAME" "STATUS" "PATH"

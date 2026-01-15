@@ -7,10 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/ui.sh"
 source "${SCRIPT_DIR}/lib/environment.sh"
-
-msg_header "OroDC Interactive Configuration"
-msg_info "This will help you configure services for your project"
-echo ""
+source "${SCRIPT_DIR}/lib/wizard.sh"
 
 # Determine project directory (same logic as initialize_environment)
 PROJECT_DIR=""
@@ -31,15 +28,16 @@ if [[ "$PROJECT_NAME" == "$HOME" ]] || [[ -z "$PROJECT_NAME" ]] || [[ "$PROJECT_
 fi
 
 # Default: save to global config directory
-GLOBAL_CONFIG_DIR="${HOME}/.config/orodc"
+GLOBAL_CONFIG_DIR="${HOME}/.orodc/${PROJECT_NAME}"
 mkdir -p "$GLOBAL_CONFIG_DIR"
-GLOBAL_ENV_FILE="${GLOBAL_CONFIG_DIR}/${PROJECT_NAME}.env.orodc"
+GLOBAL_ENV_FILE="${GLOBAL_CONFIG_DIR}/.env.orodc"
 
 # Local project file (absolute path)
 LOCAL_ENV_FILE="${PROJECT_DIR}/.env.orodc"
 
 # Determine which config file to use for loading existing values
 # Priority: local > global
+# Also check for old format global config and migrate it
 ENV_FILE=""
 if [[ -f "$LOCAL_ENV_FILE" ]]; then
   ENV_FILE="$LOCAL_ENV_FILE"
@@ -47,6 +45,16 @@ if [[ -f "$LOCAL_ENV_FILE" ]]; then
 elif [[ -f "$GLOBAL_ENV_FILE" ]]; then
   ENV_FILE="$GLOBAL_ENV_FILE"
   msg_info "Found global configuration: $GLOBAL_ENV_FILE"
+else
+  # Check for old format global config (without subdirectory)
+  OLD_GLOBAL_ENV_FILE="${HOME}/.orodc/${PROJECT_NAME}.env.orodc"
+  if [[ -f "$OLD_GLOBAL_ENV_FILE" ]]; then
+    # Migrate old format to new format
+    mkdir -p "$(dirname "$GLOBAL_ENV_FILE")"
+    mv "$OLD_GLOBAL_ENV_FILE" "$GLOBAL_ENV_FILE"
+    msg_info "Migrated configuration from old format to: $GLOBAL_ENV_FILE"
+    ENV_FILE="$GLOBAL_ENV_FILE"
+  fi
 fi
 
 # Load existing configuration if available
@@ -103,9 +111,97 @@ if [[ -f "$ENV_FILE" ]]; then
   echo ""
 fi
 
-# 1. PHP Configuration
-echo ""
-msg_header "1. PHP Configuration"
+# Initialize wizard
+wizard_init "OroDC Interactive Configuration"
+
+# Page 1: PHP Configuration
+init_page_php() {
+  msg_header "1. PHP Configuration"
+  echo "" >&2
+  
+  # Get or set values from wizard data
+  local SELECTED_PHP=$(wizard_get "SELECTED_PHP" "${EXISTING_PHP_VERSION:-8.4}")
+  local SELECTED_NODE=$(wizard_get "SELECTED_NODE" "${EXISTING_NODE_VERSION:-22}")
+  local SELECTED_COMPOSER=$(wizard_get "SELECTED_COMPOSER" "${EXISTING_COMPOSER_VERSION:-2}")
+  local SELECTED_PHP_IMAGE=$(wizard_get "SELECTED_PHP_IMAGE" "$EXISTING_PHP_IMAGE")
+  
+  # Determine if using custom image
+  USE_CUSTOM_PHP=false
+  if [[ -n "$SELECTED_PHP_IMAGE" ]] && [[ ! "$SELECTED_PHP_IMAGE" =~ ^ghcr\.io/digitalspacestdio/orodc-php-node-symfony: ]]; then
+    USE_CUSTOM_PHP=true
+  fi
+  
+  if prompt_yes_no "Use custom PHP image?" "$([ "$USE_CUSTOM_PHP" = true ] && echo yes || echo no)"; then
+    >&2 echo -n "Enter custom PHP image$([ -n "$SELECTED_PHP_IMAGE" ] && echo " [current: $SELECTED_PHP_IMAGE]" || echo ""): "
+    read SELECTED_PHP_IMAGE </dev/tty
+    # If empty, keep existing
+    if [[ -z "$SELECTED_PHP_IMAGE" ]] && [[ -n "$EXISTING_PHP_IMAGE" ]]; then
+      SELECTED_PHP_IMAGE="$EXISTING_PHP_IMAGE"
+    fi
+    # Extract versions from custom image if possible (or use defaults/existing)
+    SELECTED_PHP="${EXISTING_PHP_VERSION:-8.4}"
+    SELECTED_NODE="${EXISTING_NODE_VERSION:-22}"
+    SELECTED_COMPOSER="${EXISTING_COMPOSER_VERSION:-2}"
+  else
+    # Select PHP version (sorted newest to oldest)
+    PHP_VERSIONS=("8.5" "8.4" "8.3" "8.2" "8.1" "7.4" "7.3")
+    DEFAULT_PHP="${SELECTED_PHP:-${EXISTING_PHP_VERSION:-8.4}}"
+    SELECTED_PHP=$(prompt_select "Select PHP version:" "$DEFAULT_PHP" "${PHP_VERSIONS[@]}")
+    
+    # Select Node.js version (based on PHP compatibility)
+    read -ra COMPATIBLE_NODE_VERSIONS <<< "$(get_compatible_node_versions "$SELECTED_PHP")"
+    
+    # Determine default Node.js version based on PHP or existing config
+    if [[ -n "$EXISTING_NODE_VERSION" ]] && [[ " ${COMPATIBLE_NODE_VERSIONS[*]} " =~ " ${EXISTING_NODE_VERSION} " ]]; then
+      DEFAULT_NODE="$EXISTING_NODE_VERSION"
+    else
+      case "$SELECTED_PHP" in
+        8.5) DEFAULT_NODE="24" ;;
+        8.4) DEFAULT_NODE="22" ;;
+        8.1|8.2|8.3) DEFAULT_NODE="20" ;;
+        7.3|7.4) DEFAULT_NODE="16" ;;
+        *) DEFAULT_NODE="22" ;;
+      esac
+      
+      # Ensure default is in compatible versions list
+      if [[ ! " ${COMPATIBLE_NODE_VERSIONS[*]} " =~ " ${DEFAULT_NODE} " ]]; then
+        DEFAULT_NODE="${COMPATIBLE_NODE_VERSIONS[0]}"
+      fi
+    fi
+    
+    SELECTED_NODE=$(prompt_select "Select Node.js version (compatible with PHP $SELECTED_PHP):" "${SELECTED_NODE:-$DEFAULT_NODE}" "${COMPATIBLE_NODE_VERSIONS[@]}")
+    
+    # Select Composer version (only for PHP 7.3, others use Composer 2 automatically)
+    if [[ "$SELECTED_PHP" == "7.3" ]]; then
+      COMPOSER_VERSIONS=("1" "2")
+      DEFAULT_COMPOSER="${SELECTED_COMPOSER:-${EXISTING_COMPOSER_VERSION:-1}}"
+      SELECTED_COMPOSER=$(prompt_select "Select Composer version:" "$DEFAULT_COMPOSER" "${COMPOSER_VERSIONS[@]}")
+    else
+      # PHP 7.4+ always uses Composer 2
+      SELECTED_COMPOSER="2"
+    fi
+    
+    # Build default image name
+    SELECTED_PHP_IMAGE="ghcr.io/digitalspacestdio/orodc-php-node-symfony:${SELECTED_PHP}-node${SELECTED_NODE}-composer${SELECTED_COMPOSER}-alpine"
+  fi
+  
+  # Save to wizard data
+  wizard_set "SELECTED_PHP" "$SELECTED_PHP"
+  wizard_set "SELECTED_NODE" "$SELECTED_NODE"
+  wizard_set "SELECTED_COMPOSER" "$SELECTED_COMPOSER"
+  wizard_set "SELECTED_PHP_IMAGE" "$SELECTED_PHP_IMAGE"
+  
+  msg_info "PHP Image: $SELECTED_PHP_IMAGE" >&2
+  echo "" >&2
+  
+  # Navigation prompt
+  echo -n "Press Enter to continue to Database Configuration, or 'b' to go back: " >&2
+  read -r nav_input </dev/tty
+  if [[ "$nav_input" == "b" ]] || [[ "$nav_input" == "back" ]]; then
+    return 1  # Go back
+  fi
+  return 0  # Continue to next page
+}
 
 # Determine if using custom image
 USE_CUSTOM_PHP=false
@@ -241,7 +337,7 @@ else
     if [[ "$EXISTING_DB_SCHEMA" == "mysql" ]] && [[ " ${MYSQL_VERSIONS[*]} " =~ " ${EXISTING_DB_VERSION} " ]]; then
       DEFAULT_MYSQL_VERSION="$EXISTING_DB_VERSION"
     else
-      DEFAULT_MYSQL_VERSION="9.0"
+      DEFAULT_MYSQL_VERSION="8.4"
     fi
     SELECTED_DB_VERSION=$(prompt_select "Select MySQL version:" "$DEFAULT_MYSQL_VERSION" "${MYSQL_VERSIONS[@]}")
     SELECTED_DB_SCHEMA="mysql"
@@ -347,7 +443,7 @@ else
       DEFAULT_VALKEY_VERSION="9.0"
     fi
     SELECTED_CACHE_VERSION=$(prompt_select "Select Valkey version:" "$DEFAULT_VALKEY_VERSION" "${VALKEY_VERSIONS[@]}")
-    SELECTED_CACHE_IMAGE="valkey/valkey:${SELECTED_CACHE_VERSION}-alpine"
+    SELECTED_CACHE_IMAGE="valkey/valkey:${SELECTED_CACHE_VERSION}"
   else
     KEYDB_VERSIONS=("6.3.4" "6.3.3")
     # Only use existing version if it's valid for KeyDB and type hasn't changed
@@ -409,29 +505,34 @@ echo "RabbitMQ Image: $SELECTED_RABBITMQ_IMAGE"
 echo ""
 
 # Ask where to save configuration
-SAVE_TO_PROJECT=false
 # Show relative path for local file if we're in project directory
 LOCAL_ENV_DISPLAY=".env.orodc"
 if [[ "$PROJECT_DIR" != "$PWD" ]]; then
   LOCAL_ENV_DISPLAY="$LOCAL_ENV_FILE"
 fi
 
+# First ask: save to project directory (default: no)
+SAVE_TO_PROJECT=false
+TARGET_ENV_FILE=""
 if prompt_yes_no "Save configuration to project directory ($LOCAL_ENV_DISPLAY)?" "no"; then
   SAVE_TO_PROJECT=true
   TARGET_ENV_FILE="$LOCAL_ENV_FILE"
 else
+  # User declined project directory, save to global config automatically
   TARGET_ENV_FILE="$GLOBAL_ENV_FILE"
   msg_info "Configuration will be saved to: $TARGET_ENV_FILE"
 fi
 
-if prompt_yes_no "Save configuration to $TARGET_ENV_FILE?" "yes"; then
+# Save configuration to selected file
+if [[ -n "$TARGET_ENV_FILE" ]]; then
+  # Always ensure directory exists before saving
+  mkdir -p "$(dirname "$TARGET_ENV_FILE")"
+  
   # Create backup if file exists
   if [[ -f "$TARGET_ENV_FILE" ]]; then
     cp "$TARGET_ENV_FILE" "${TARGET_ENV_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
     msg_info "Backup created: ${TARGET_ENV_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
   else
-    # Create directory if needed (for global config)
-    mkdir -p "$(dirname "$TARGET_ENV_FILE")"
     # Create new file with header
     cat > "$TARGET_ENV_FILE" << EOF
 # OroDC Configuration

@@ -21,6 +21,39 @@ fi
 purge_cmd="${DOCKER_COMPOSE_BIN_CMD} down -v --remove-orphans"
 run_with_spinner "Stopping and removing containers" "$purge_cmd" || exit $?
 
+# Remove any remaining containers, volumes, and networks with project prefix
+# (docker compose down may miss some resources created manually or orphaned)
+if [[ -n "${DC_ORO_NAME:-}" ]]; then
+  project_prefix="${DC_ORO_NAME}_"
+  
+  # Find and remove containers with project prefix
+  remaining_containers=$(docker ps -aq --filter "name=${project_prefix}" --format "{{.ID}}" 2>/dev/null | grep "^" || true)
+  if [[ -n "$remaining_containers" ]]; then
+    echo "$remaining_containers" | while read -r container_id; do
+      [[ -n "$container_id" ]] && docker rm -f "$container_id" 2>/dev/null || true
+    done
+  fi
+  
+  # Remove all volumes with project prefix (docker compose down -v may miss some)
+  remaining_volumes=$(docker volume ls --filter "name=${project_prefix}" --format "{{.Name}}" 2>/dev/null | grep "^" || true)
+  if [[ -n "$remaining_volumes" ]]; then
+    echo "$remaining_volumes" | while read -r volume_name; do
+      [[ -n "$volume_name" ]] && docker volume rm "$volume_name" 2>/dev/null || true
+    done
+  fi
+  
+  # Remove all networks with project prefix
+  remaining_networks=$(docker network ls --filter "name=${project_prefix}" --format "{{.Name}}" 2>/dev/null | grep "^" || true)
+  if [[ -n "$remaining_networks" ]]; then
+    echo "$remaining_networks" | while read -r network_name; do
+      # Filter out default networks (bridge, host, none) and shared networks
+      if [[ -n "$network_name" ]] && [[ "$network_name" != "bridge" ]] && [[ "$network_name" != "host" ]] && [[ "$network_name" != "none" ]] && [[ "$network_name" != "dc_shared_net" ]]; then
+        docker network rm "$network_name" 2>/dev/null || true
+      fi
+    done
+  fi
+fi
+
 # Remove entire configuration directory (includes compose.yml and all other files)
 # Try multiple possible locations to ensure we delete the correct directory
 config_dirs_to_remove=()

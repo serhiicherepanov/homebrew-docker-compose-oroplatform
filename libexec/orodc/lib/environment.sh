@@ -462,8 +462,17 @@ initialize_environment() {
     if [[ "$project_name" == "$HOME" ]] || [[ -z "$project_name" ]] || [[ "$project_name" == "/" ]]; then
       project_name="default"
     fi
-    local global_config_file="${HOME}/.config/orodc/${project_name}.env.orodc"
+    local global_config_file="${HOME}/.orodc/${project_name}/.env.orodc"
     local local_config_file="$DC_ORO_APPDIR/.env.orodc"
+
+    # Migrate old format global config if exists (without subdirectory)
+    local old_global_config_file="${HOME}/.orodc/${project_name}.env.orodc"
+    if [[ -f "$old_global_config_file" ]] && [[ ! -f "$global_config_file" ]]; then
+      # Migrate old format to new format
+      mkdir -p "$(dirname "$global_config_file")"
+      mv "$old_global_config_file" "$global_config_file"
+      debug_log "initialize_environment: migrated global config from old format to: $global_config_file"
+    fi
 
     # Load standard OroPlatform env files first
     load_env_safe "$DC_ORO_APPDIR/.env"
@@ -517,6 +526,44 @@ initialize_environment() {
     # Set DC_ORO_CONFIG_DIR
     if [[ -z "${DC_ORO_CONFIG_DIR:-}" ]]; then
       export DC_ORO_CONFIG_DIR="${HOME}/.docker-compose-oroplatform/${DC_ORO_NAME}"
+    fi
+
+    # Set PHP user name defaults
+    # If not set, use "developer" as default user name
+    if [[ -z "${DC_ORO_USER_NAME:-}" ]]; then
+      export DC_ORO_USER_NAME="developer"
+    fi
+    if [[ -z "${DC_ORO_PHP_USER_NAME:-}" ]]; then
+      export DC_ORO_PHP_USER_NAME="developer"
+    fi
+    if [[ -z "${DC_ORO_PHP_USER_GROUP:-}" ]]; then
+      export DC_ORO_PHP_USER_GROUP="developer"
+    fi
+
+    # Set PHP user UID/GID defaults
+    # These are independent of user name - UID/GID determine file ownership
+    # On Linux: use current user's UID/GID for proper bind mount permissions
+    #   This ensures files created in container match host user permissions
+    # On macOS: use 1000 (standard default, matches most setups)
+    # Note: If user is "developer" but UID/GID are not set, we still need to set them
+    #   based on OS to ensure proper file permissions on bind mounts
+    if [[ -z "${DC_ORO_PHP_UID:-}" ]]; then
+      if [[ "$(uname)" == "Linux" ]]; then
+        # On Linux, use current user's UID (usually 1000 for first user, but can be different)
+        export DC_ORO_PHP_UID=$(id -u)
+      else
+        # On macOS and other systems, use default 1000
+        export DC_ORO_PHP_UID=1000
+      fi
+    fi
+    if [[ -z "${DC_ORO_PHP_GID:-}" ]]; then
+      if [[ "$(uname)" == "Linux" ]]; then
+        # On Linux, use current user's GID (usually 1000 for first user, but can be different)
+        export DC_ORO_PHP_GID=$(id -g)
+      else
+        # On macOS and other systems, use default 1000
+        export DC_ORO_PHP_GID=1000
+      fi
     fi
 
     # Set DOCKER_BASE_URL from DC_ORO_URL or default to https://${DC_ORO_NAME}.docker.local
@@ -632,10 +679,10 @@ initialize_environment() {
     # Always regenerate if schema is set to ensure consistency with port
     if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
       local db_schema="${DC_ORO_DATABASE_SCHEMA}"
-      local db_user="${DC_ORO_DATABASE_USER:-app}"
-      local db_password="${DC_ORO_DATABASE_PASSWORD:-app}"
+      local db_user="${DC_ORO_DATABASE_USER:-app_db_user}"
+      local db_password="${DC_ORO_DATABASE_PASSWORD:-app_db_pass}"
       local db_host="${DC_ORO_DATABASE_HOST:-database}"
-      local db_name="${DC_ORO_DATABASE_DBNAME:-app}"
+      local db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
       
       # Use port from DC_ORO_DATABASE_PORT if set, otherwise determine from schema
       local db_port="${DC_ORO_DATABASE_PORT:-}"

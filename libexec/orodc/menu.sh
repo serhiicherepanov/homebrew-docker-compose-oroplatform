@@ -181,7 +181,7 @@ show_interactive_menu() {
   
   # Interactive selection with arrow keys
   local selected=1
-  local total_options=22
+  local total_options=23
   local choice=""
   
   # Function to truncate text to maximum length
@@ -308,7 +308,7 @@ show_interactive_menu() {
     printf "\033[0m\033[?25h" >&2
     tput sgr0 2>/dev/null || true
     stty sane 2>/dev/null || true
-    echo -n "Use ↑↓ arrows to navigate, or type number [1-22], 'v' for VERBOSE, 'q' to quit: " >&2
+    echo -n "Use ↑↓ arrows to navigate, or type number [1-23], 'v' for VERBOSE, 'q' to quit: " >&2
     # Display input buffer if user is typing a number
     if [[ -n "$input_buf" ]]; then
       printf "%s" "$input_buf" >&2
@@ -342,6 +342,7 @@ show_interactive_menu() {
       "Purge database"
       "Add/Manage domains"
       "Configure application URL"
+      "Show environment variables"
       "Clear cache"
       "Reindex search"
       "Platform update"
@@ -395,22 +396,23 @@ show_interactive_menu() {
       local sel=$1
       render_cell 13 $((sel == 13))
       render_cell 14 $((sel == 14))
+      render_cell 15 $((sel == 15))
     }
     
     render_group_oro_maintenance() {
       local sel=$1
-      render_cell 15 $((sel == 15))
       render_cell 16 $((sel == 16))
       render_cell 17 $((sel == 17))
       render_cell 18 $((sel == 18))
       render_cell 19 $((sel == 19))
       render_cell 20 $((sel == 20))
+      render_cell 21 $((sel == 21))
     }
     
     render_group_proxy() {
       local sel=$1
-      render_cell 21 $((sel == 21))
       render_cell 22 $((sel == 22))
+      render_cell 23 $((sel == 23))
     }
     
     # Helper to get item from group by index
@@ -424,8 +426,8 @@ show_interactive_menu() {
         maintenance) render_cell $((7 + index)) $((sel == $((7 + index)))) ;;
         database) render_cell $((10 + index)) $((sel == $((10 + index)))) ;;
         configuration) render_cell $((13 + index)) $((sel == $((13 + index)))) ;;
-        oro) render_cell $((15 + index)) $((sel == $((15 + index)))) ;;
-        proxy) render_cell $((21 + index)) $((sel == $((21 + index)))) ;;
+        oro) render_cell $((16 + index)) $((sel == $((16 + index)))) ;;
+        proxy) render_cell $((22 + index)) $((sel == $((22 + index)))) ;;
         *) printf "  %-32s" "" >&2 ;;
       esac
     }
@@ -460,8 +462,8 @@ show_interactive_menu() {
       # Empty line between sections
       echo "" >&2
       
-      # Section 2: Maintenance (3) vs Configuration (2) vs Proxy (2)
-      # Max height: 3, so Configuration and Proxy need 1 empty line each
+      # Section 2: Maintenance (3) vs Configuration (3) vs Proxy (2)
+      # Max height: 3, so Proxy needs 1 empty line
       
       # Headers
       printf "  \033[1;32m%-32s\033[0m  \033[1;33m%-32s\033[0m  \033[1;37m%-32s\033[0m\n" "Maintenance:" "Configuration:" "Proxy:" >&2
@@ -471,8 +473,8 @@ show_interactive_menu() {
       get_group_item maintenance 0 $sel; get_group_item configuration 0 $sel; get_group_item proxy 0 $sel; echo "" >&2
       get_group_item maintenance 1 $sel; get_group_item configuration 1 $sel; get_group_item proxy 1 $sel; echo "" >&2
       
-      # Row 3: Only Maintenance has item, others are empty
-      get_group_item maintenance 2 $sel; printf "  %-32s" "" >&2; printf "  %-32s" "" >&2; echo "" >&2
+      # Row 3: Maintenance and Configuration have items, Proxy is empty
+      get_group_item maintenance 2 $sel; get_group_item configuration 2 $sel; printf "  %-32s" "" >&2; echo "" >&2
       printf "\033[0m" >&2
     elif [[ "$use_two_cols" == "true" ]]; then
       # Two column layout using group functions
@@ -498,10 +500,10 @@ show_interactive_menu() {
       printf "  \033[1;35m%-32s\033[0m  \033[1;33m%-32s\033[0m\n" "Database:" "Configuration:" >&2
       printf "\033[0m" >&2
       
-      # Database has 3 items, Configuration has 2
+      # Database has 3 items, Configuration has 3
       get_group_item database 0 $sel; get_group_item configuration 0 $sel; echo "" >&2
       get_group_item database 1 $sel; get_group_item configuration 1 $sel; echo "" >&2
-      get_group_item database 2 $sel; printf "  %-32s" "" >&2; echo "" >&2
+      get_group_item database 2 $sel; get_group_item configuration 2 $sel; echo "" >&2
       
       # Section 3: Oro Maintenance + Proxy
       echo "" >&2
@@ -547,22 +549,23 @@ show_interactive_menu() {
       printf "\033[0m" >&2
       render_menu_option 13 $((selected_option == 13)) "Add/Manage domains"
       render_menu_option 14 $((selected_option == 14)) "Configure application URL"
+      render_menu_option 15 $((selected_option == 15)) "Show environment variables"
       echo "" >&2
       printf "\033[0m" >&2
       echo -e "\033[1;31mOro Maintenance:\033[0m" >&2
       printf "\033[0m" >&2
-      render_menu_option 15 $((selected_option == 15)) "Clear cache"
-      render_menu_option 16 $((selected_option == 16)) "Reindex search"
-      render_menu_option 17 $((selected_option == 17)) "Platform update"
-      render_menu_option 18 $((selected_option == 18)) "Install with demo"
-      render_menu_option 19 $((selected_option == 19)) "Install without demo"
-      render_menu_option 20 $((selected_option == 20)) "Install dependencies"
+      render_menu_option 16 $((selected_option == 16)) "Clear cache"
+      render_menu_option 17 $((selected_option == 17)) "Reindex search"
+      render_menu_option 18 $((selected_option == 18)) "Platform update"
+      render_menu_option 19 $((selected_option == 19)) "Install with demo"
+      render_menu_option 20 $((selected_option == 20)) "Install without demo"
+      render_menu_option 21 $((selected_option == 21)) "Install dependencies"
       echo "" >&2
       printf "\033[0m" >&2
       echo -e "\033[1;37mProxy:\033[0m" >&2
       printf "\033[0m" >&2
-      render_menu_option 21 $((selected_option == 21)) "Start proxy"
-      render_menu_option 22 $((selected_option == 22)) "Stop proxy"
+      render_menu_option 22 $((selected_option == 22)) "Start proxy"
+      render_menu_option 23 $((selected_option == 23)) "Stop proxy"
       printf "\033[0m" >&2
     fi
     
@@ -657,7 +660,7 @@ show_interactive_menu() {
         fi
       fi
       # Validate number and update selection (always wait for Enter in next iteration)
-      if [[ "$num_input" =~ ^[1-9]$ ]] || [[ "$num_input" =~ ^1[0-9]$ ]] || [[ "$num_input" == "20" ]] || [[ "$num_input" == "21" ]] || [[ "$num_input" == "22" ]]; then
+      if [[ "$num_input" =~ ^[1-9]$ ]] || [[ "$num_input" =~ ^1[0-9]$ ]] || [[ "$num_input" == "20" ]] || [[ "$num_input" == "21" ]] || [[ "$num_input" == "22" ]] || [[ "$num_input" == "23" ]]; then
         # Update selected option to match input, wait for Enter to confirm
         selected=$num_input
         redraw_menu_screen $selected $use_two_columns "$input_buffer" "$use_three_columns" "$status_display" || true
@@ -925,7 +928,7 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return cache clear
+      run_command_with_menu_return env
       ;;
     16)
       if ! check_in_project; then
@@ -936,7 +939,7 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return search reindex
+      run_command_with_menu_return cache clear
       ;;
     17)
       if ! check_in_project; then
@@ -947,7 +950,7 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return platform-update
+      run_command_with_menu_return search reindex
       ;;
     18)
       if ! check_in_project; then
@@ -958,7 +961,7 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return install
+      run_command_with_menu_return platform-update
       ;;
     19)
       if ! check_in_project; then
@@ -969,7 +972,7 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return install --without-demo
+      run_command_with_menu_return install
       ;;
     20)
       if ! check_in_project; then
@@ -980,12 +983,23 @@ show_interactive_menu() {
         show_interactive_menu
         return
       fi
-      run_command_with_menu_return composer install
+      run_command_with_menu_return install --without-demo
       ;;
     21)
-      run_command_with_menu_return proxy up -d
+      if ! check_in_project; then
+        msg_error "Not in project directory (exit code: 1)" >&2
+        echo "" >&2
+        echo -n "Press Enter to continue..." >&2
+        read -r
+        show_interactive_menu
+        return
+      fi
+      run_command_with_menu_return composer install
       ;;
     22)
+      run_command_with_menu_return proxy up -d
+      ;;
+    23)
       run_command_with_menu_return proxy down
       ;;
     v|V)

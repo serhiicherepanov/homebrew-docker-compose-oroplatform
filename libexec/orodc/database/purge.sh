@@ -18,7 +18,7 @@ if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
   exit 1
 fi
 
-db_name="${DC_ORO_DATABASE_DBNAME:-app}"
+db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
 echo "" >&2
 msg_danger "This will DELETE ALL DATA in database '${db_name}'!"
 if ! confirm_yes_no "Continue?"; then

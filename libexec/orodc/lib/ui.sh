@@ -282,6 +282,7 @@ prompt_select() {
   while true; do
     # Output to stderr to avoid interfering with return value
     >&2 echo -e "\033[36m==> $prompt\033[0m"
+    >&2 echo ""
     
     local i=1
     for opt in "${options[@]}"; do
@@ -297,6 +298,7 @@ prompt_select() {
     local selection
     >&2 echo -n "Select [1-${#options[@]}] (default: $default): "
     read selection </dev/tty
+    >&2 echo ""
     
     # Empty input - use default
     if [[ -z "$selection" ]]; then
@@ -415,9 +417,10 @@ confirm_yes_no() {
       else
         answer="n"
       fi
-    else
-      echo "" >&2
     fi
+    
+    # Always add newline after input
+    echo "" >&2
 
     # Accept: y, yes, Y, YES, n, no, N, NO
     case "${answer,,}" in  # Convert to lowercase

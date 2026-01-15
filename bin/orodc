@@ -501,6 +501,15 @@ case "$1" in
     fi
     ;;
 
+  env)
+    shift
+    if [[ -n "${ORODC_IS_INTERACTIVE_MENU:-}" ]]; then
+      execute_with_menu_return "${LIBEXEC_DIR}/env.sh" "$@"
+    else
+      exec "${LIBEXEC_DIR}/env.sh" "$@"
+    fi
+    ;;
+
   # Convenient aliases for common Docker Compose commands
   start)
     # Alias: orodc start -> orodc compose up -d

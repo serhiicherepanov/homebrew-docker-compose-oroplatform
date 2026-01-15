@@ -44,9 +44,9 @@ export_database_interactive() {
   # Set defaults for database connection parameters
   local db_host="${DC_ORO_DATABASE_HOST:-database}"
   local db_port="${DC_ORO_DATABASE_PORT:-5432}"
-  local db_user="${DC_ORO_DATABASE_USER:-app}"
-  local db_password="${DC_ORO_DATABASE_PASSWORD:-app}"
-  local db_name="${DC_ORO_DATABASE_DBNAME:-app}"
+  local db_user="${DC_ORO_DATABASE_USER:-app_db_user}"
+  local db_password="${DC_ORO_DATABASE_PASSWORD:-app_db_pass}"
+  local db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
   
   # Adjust port for MySQL
   if [[ "${DC_ORO_DATABASE_SCHEMA}" == "mariadb" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_mysql" ]]; then

@@ -144,9 +144,9 @@ orodc exec bash -c 'bin/magento setup:install \
   --base-url="${DOCKER_BASE_URL}" \
   --base-url-secure="${DOCKER_BASE_URL}" \
   --db-host="${DC_ORO_DATABASE_HOST:-database}" \
-  --db-name="${DC_ORO_DATABASE_DBNAME:-app}" \
-  --db-user="${DC_ORO_DATABASE_USER:-app}" \
-  --db-password="${DC_ORO_DATABASE_PASSWORD:-app}" \
+  --db-name="${DC_ORO_DATABASE_DBNAME:-app_db}" \
+  --db-user="${DC_ORO_DATABASE_USER:-app_db_user}" \
+  --db-password="${DC_ORO_DATABASE_PASSWORD:-app_db_pass}" \
   --admin-firstname=Admin \
   --admin-lastname=User \
   --admin-email=admin@example.com \
@@ -1185,13 +1185,13 @@ DC_ORO_USER_NAME=developer         # Runtime user name
 # PostgreSQL settings (default database)
 DC_ORO_DATABASE_HOST=database      # Database host
 DC_ORO_DATABASE_PORT=5432          # Database port
-DC_ORO_DATABASE_USER=app           # Database user
-DC_ORO_DATABASE_PASSWORD=app       # Database password  
-DC_ORO_DATABASE_DBNAME=app         # Database name
+DC_ORO_DATABASE_USER=app_db_user   # Database user
+DC_ORO_DATABASE_PASSWORD=app_db_pass # Database password  
+DC_ORO_DATABASE_DBNAME=app_db      # Database name
 DC_ORO_DATABASE_SCHEMA=postgres    # Database type (postgres/mysql)
 
 # Connection URI (auto-generated)
-DC_ORO_DATABASE_URI=postgres://app:app@database:5432/app
+DC_ORO_DATABASE_URI=postgres://app_db_user:app_db_pass@database:5432/app_db
 ```
 
 #### 🔍 Search & Cache Configuration

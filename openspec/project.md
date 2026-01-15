@@ -35,7 +35,7 @@ The tool is distributed as a Homebrew formula and manages multi-container Docker
   - Performance-optimized settings
 
 #### Official Images
-- **MySQL**: `mysql:8.0-oracle`
+- **MySQL**: `mysql:8.4`
 - **Cache**: `redis:6.2`, `redis:7.0`
 - **Search**: `elasticsearch:8.10.3`
 - **Queue**: `oroinc/rabbitmq:3.9-1-management-alpine`
@@ -330,7 +330,7 @@ OroDC dynamically assembles the Docker Compose command by conditionally includin
    - **MySQL/MariaDB** (`docker-compose-mysql.yml`):
      - Loaded when `DC_ORO_DATABASE_SCHEMA` is normalized to `mysql`
      - Accepts values: `mysql`, `mariadb`, `pdo_mysql` (all normalized to `mysql`)
-     - Uses official image: `mysql:8.0-oracle` or `mariadb:10.11` (based on `DC_ORO_DATABASE_IMAGE`)
+     - Uses official image: `mysql:8.4` (default) or `mariadb:10.11` (based on `DC_ORO_DATABASE_IMAGE`)
      - Sets `DC_ORO_DATABASE_PORT=3306`
 
 4. **User Custom Configuration** (`.docker-compose.user.yml`):
@@ -343,6 +343,9 @@ OroDC dynamically assembles the Docker Compose command by conditionally includin
 Database type detection follows a priority-based approach:
 
 1. **Primary Source: `.env.orodc` Configuration File**
+   - Configuration file location (priority: local > global):
+     - **Local**: `{PROJECT_DIR}/.env.orodc` (project root) - HIGHEST PRIORITY
+     - **Global**: `{HOME}/.orodc/{PROJECT_NAME}/.env.orodc` - LOWER PRIORITY
    - If `DC_ORO_DATABASE_SCHEMA` is set in `.env.orodc` (created by `orodc init`), use that value
    - Values are normalized: `pgsql`, `postgresql`, `pdo_pgsql` → `postgres`
    - Values are normalized: `mariadb`, `pdo_mysql` → `mysql`

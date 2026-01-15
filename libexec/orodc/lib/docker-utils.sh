@@ -166,6 +166,21 @@ fix_empty_directory_ownership() {
   fi
 }
 
+# Remove marker file after containers have started
+# This marker file was created to fix ownership of empty directories
+# Usage: remove_marker_file
+remove_marker_file() {
+  if [[ -z "${DC_ORO_APPDIR:-}" ]] || [[ ! -d "${DC_ORO_APPDIR}" ]]; then
+    return 0
+  fi
+
+  local marker_file="${DC_ORO_APPDIR}/.orodc.marker"
+  if [[ -f "$marker_file" ]]; then
+    rm -f "$marker_file" 2>/dev/null || true
+    debug_log "docker-utils: removed marker file ${marker_file} after containers started"
+  fi
+}
+
 # Handle compose up command with separate build and start phases
 # Usage: handle_compose_up
 # Expects: docker_services, left_flags, left_options, right_flags, right_options
@@ -200,6 +215,8 @@ handle_compose_up() {
 
     up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up --remove-orphans ${up_flags[*]} ${right_options[*]} ${docker_services}"
     eval "$up_cmd" || exit $?
+    # Remove marker file after containers started successfully
+    remove_marker_file
     show_service_urls
     exit 0
   fi
@@ -233,6 +250,9 @@ handle_compose_up() {
 
   up_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} up --remove-orphans ${up_flags[*]} ${right_options[*]} ${docker_services}"
   run_with_spinner "Starting services" "$up_cmd" || exit $?
+
+  # Remove marker file after containers started successfully
+  remove_marker_file
 
   # Calculate total up time and save
   up_end_time=$(date +%s)

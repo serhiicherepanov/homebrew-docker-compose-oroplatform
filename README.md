@@ -55,6 +55,10 @@
 
 ## 📚 Documentation
 
+**Application-specific guides:**
+- **[docs/ORO.md](docs/ORO.md)** - Complete setup guide for OroCommerce, OroCRM, OroPlatform, MarelloCommerce
+- **[docs/MAGENTO.md](docs/MAGENTO.md)** - Complete setup guide for Magento 2 (Mage-OS)
+
 **For developers and contributors:**
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development guide with workflows, commands, and troubleshooting
 - **[LOCAL-TESTING.md](LOCAL-TESTING.md)** - Comprehensive testing methods and procedures
@@ -113,127 +117,65 @@ orodc tests bin/behat --available-suites # Run Behat behavior tests
 
 OroDC supports **any PHP-based application**, including:
 
-- **ORO Platform**: OroCommerce, OroCRM, OroPlatform, MarelloCommerce
-- **Magento**: Magento 2.x (Open Source, Commerce)
+- **ORO Platform**: OroCommerce, OroCRM, OroPlatform, MarelloCommerce - [📖 Complete Guide](docs/ORO.md)
+- **Magento**: Magento 2.x (Open Source, Commerce) - [📖 Complete Guide](docs/MAGENTO.md)
 - **Symfony**: Any Symfony-based application
 - **Laravel**: Laravel applications
 - **WordPress**: WordPress sites
 - **Drupal**: Drupal CMS
 - **Any PHP CMS**: Generic PHP applications
 
-### 📦 Magento 2 Example
-
-Complete setup example for Magento 2:
+### 📦 Magento 2 Quick Start
 
 ```bash
 # 1. Install OroDC
 brew install digitalspacestdio/docker-compose-oroplatform/docker-compose-oroplatform
 
-# 2. Clone Magento repository
-git clone https://github.com/magento/magento2.git ~/magento2
-cd ~/magento2
+# 2. Create empty project directory
+mkdir ~/mageos && cd ~/mageos
 
-# 3. Initialize OroDC environment
-orodc init
+# 3. Initialize and start
+orodc init && orodc up -d
 
-# 4. Start containers
-orodc up -d
+# 4. Create Magento project (Mage-OS)
+orodc exec composer create-project --repository-url=https://repo.mage-os.org/ mage-os/project-community-edition .
 
-# 5. Install Magento via CLI
-orodc exec bash -c 'bin/magento setup:install \
+# 5. Install Magento
+orodc exec bin/magento setup:install \
   --base-url="${DOCKER_BASE_URL}" \
   --base-url-secure="${DOCKER_BASE_URL}" \
-  --db-host="${DC_ORO_DATABASE_HOST:-database}" \
-  --db-name="${DC_ORO_DATABASE_DBNAME:-app_db}" \
-  --db-user="${DC_ORO_DATABASE_USER:-app_db_user}" \
-  --db-password="${DC_ORO_DATABASE_PASSWORD:-app_db_pass}" \
-  --admin-firstname=Admin \
-  --admin-lastname=User \
-  --admin-email=admin@example.com \
-  --admin-user=admin \
-  --admin-password=Admin123456 \
-  --backend-frontname=admin \
-  --language=en_US \
-  --currency=USD \
-  --timezone=America/New_York \
-  --use-rewrites=1 \
-  --use-secure=1 \
-  --use-secure-admin=1 \
-  --search-engine=opensearch \
-  --opensearch-host=search \
-  --opensearch-port=9200'
+  --db-host="${ORO_DB_HOST:-database}" \
+  --db-name="${ORO_DB_NAME:-app_db}" \
+  --db-user="${ORO_DB_USER:-app_db_user}" \
+  --db-password="${ORO_DB_PASSWORD:-app_db_pass}" \
+  --admin-user=admin --admin-password=Admin123456 \
+  --admin-email=admin@example.com --admin-firstname=Admin --admin-lastname=User \
+  --backend-frontname=admin --language=en_US --currency=USD --timezone=America/New_York \
+  --use-rewrites=1 --use-secure=1 --use-secure-admin=1 \
+  --search-engine=opensearch --opensearch-host=search --opensearch-port=9200
 
-# 6. Deploy static content
-orodc exec bin/magento setup:static-content:deploy -f
-
-# 7. Compile DI
-orodc exec bin/magento setup:di:compile
-
-# 8. Clear cache
-orodc exec bin/magento cache:flush
-
-# 9. Disable Two-Factor Authentication (2FA) for development
-# Option 1: For Magento Commerce/Adobe Commerce (with Adobe IMS):
-# orodc exec bin/magento module:disable Magento_AdminAdobeImsTwoFactorAuth Magento_TwoFactorAuth
-# orodc exec bin/magento setup:upgrade
-# orodc exec bin/magento cache:flush
-
-# Option 2: For Magento Open Source / MageOS (without Adobe IMS):
-orodc exec bin/magento module:disable Magento_TwoFactorAuth
-orodc exec bin/magento setup:upgrade
-orodc exec bin/magento cache:flush
-
-# Access your Magento installation
-# Frontend: https://magento2.docker.local
-# Admin: https://magento2.docker.local/admin
-# Admin credentials: admin / Admin123456
+# Access: https://mageos.docker.local/admin (admin / Admin123456)
 ```
 
-**Note:** If you see "You need to configure Two-Factor Authorization" message after login, disable 2FA using the command above.
+📖 **For complete Magento setup guide, see [docs/MAGENTO.md](docs/MAGENTO.md)**
 
-**Key Magento Commands:**
-```bash
-# Static content deployment
-orodc exec bin/magento setup:static-content:deploy -f
-
-# Compile dependency injection
-orodc exec bin/magento setup:di:compile
-
-# Cache management
-orodc exec bin/magento cache:clean
-orodc exec bin/magento cache:flush
-
-# Index management
-orodc exec bin/magento indexer:reindex
-
-# Enable developer mode
-orodc exec bin/magento deploy:mode:set developer
-
-# Disable Two-Factor Authentication (2FA)
-# Option 1: For Magento Commerce/Adobe Commerce (with Adobe IMS):
-# orodc exec bin/magento module:disable Magento_AdminAdobeImsTwoFactorAuth Magento_TwoFactorAuth
-# orodc exec bin/magento setup:upgrade
-# orodc exec bin/magento cache:flush
-
-# Option 2: For Magento Open Source / MageOS (without Adobe IMS):
-orodc exec bin/magento module:disable Magento_TwoFactorAuth
-orodc exec bin/magento setup:upgrade
-orodc exec bin/magento cache:flush
-```
-
-### 🚀 OroCommerce / OroPlatform Example
+### 🚀 OroCommerce / OroPlatform Quick Start
 
 ```bash
-# Clone and setup OroCommerce
+# 1. Install OroDC
+brew install digitalspacestdio/docker-compose-oroplatform/docker-compose-oroplatform
+
+# 2. Clone and setup OroCommerce
 git clone --single-branch --branch 6.1.4 https://github.com/oroinc/orocommerce-application.git ~/orocommerce
 cd ~/orocommerce
 
-# Install and start
+# 3. Install and start
 orodc install && orodc up -d
 
-# Access: https://orocommerce.docker.local/admin
-# Default credentials: admin / 12345678
+# Access: https://orocommerce.docker.local/admin (admin / 12345678)
 ```
+
+📖 **For complete ORO Platform setup guide, see [docs/ORO.md](docs/ORO.md)**
 
 ## ⚠️ Critical Testing Requirements
 

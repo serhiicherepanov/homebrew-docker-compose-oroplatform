@@ -451,11 +451,17 @@ initialize_environment() {
     local global_config_file="${HOME}/.orodc/${project_name}/.env.orodc"
     # Also check for old format global config
     local old_global_config_file="${HOME}/.orodc/${project_name}.env.orodc"
+    # Check for config directory (indicates project was initialized before)
+    local config_dir="${HOME}/.docker-compose-oroplatform/${project_name}"
     
     if [[ -f "$global_config_file" ]] || [[ -f "$old_global_config_file" ]]; then
       # Global config exists for this directory name, use current directory as project
       export DC_ORO_APPDIR="$PWD"
       debug_log "initialize_environment: found global config for project '$project_name', using current directory as project"
+    elif [[ -d "$config_dir" ]]; then
+      # Config directory exists (project was initialized), use current directory as project
+      export DC_ORO_APPDIR="$PWD"
+      debug_log "initialize_environment: found config directory for project '$project_name', using current directory as project"
     fi
   fi
 

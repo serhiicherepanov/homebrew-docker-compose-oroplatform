@@ -12,9 +12,7 @@ source "${SCRIPT_DIR}/lib/docker-utils.sh"
 # Check that we're in a project
 check_in_project || exit 1
 
-# Fix ownership for empty directories before running container
-# This ensures that empty directories have correct owner (developer) instead of root
-fix_empty_directory_ownership
+# Note: Directory ownership is now handled in Dockerfile.project
 
 # Check if command is provided
 if [[ $# -eq 0 ]]; then

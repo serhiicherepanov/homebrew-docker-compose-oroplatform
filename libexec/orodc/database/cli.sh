@@ -7,7 +7,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../lib/common.sh"
 source "${SCRIPT_DIR}/../lib/ui.sh"
 source "${SCRIPT_DIR}/../lib/environment.sh"
-source "${SCRIPT_DIR}/../lib/docker-utils.sh"
 
 # Check that we're in a project
 # Note: initialize_environment is called by router (bin/orodc) before routing to this script
@@ -24,9 +23,6 @@ fi
 if ! run_with_spinner "Starting containers" "${DOCKER_COMPOSE_BIN_CMD} up -d --remove-orphans --quiet-pull --quiet-build"; then
   # If startup failed, still try to run the command (containers might be partially started)
   true
-else
-  # Remove marker file after containers started successfully
-  remove_marker_file
 fi
 
 # Execute command in cli container (different from database-cli)

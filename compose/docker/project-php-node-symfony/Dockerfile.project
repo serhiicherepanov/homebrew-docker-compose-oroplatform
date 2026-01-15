@@ -9,6 +9,16 @@ FROM ${BASE_IMAGE}
 # Switch to root to install certificates if they exist
 USER root
 
+# Create project directory with correct ownership to fix bind mount ownership issues
+# This ensures that empty directories have correct owner when bind-mounted from host
+ARG APP_DIR=/var/www
+ARG PHP_USER_NAME=developer
+ARG PHP_USER_GROUP=developer
+ARG PHP_UID=1000
+ARG PHP_GID=1000
+RUN mkdir -p "${APP_DIR}" && \
+    chown -R ${PHP_UID}:${PHP_GID} "${APP_DIR}"
+
 # Copy certificates from build context .crt directory if it exists (using wildcard pattern)
 # This will be managed by orodc sync logic - copies .crt directory only if present
 COPY .cr[t] /tmp/certs/

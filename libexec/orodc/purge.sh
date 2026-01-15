@@ -11,14 +11,14 @@ source "${SCRIPT_DIR}/lib/environment.sh"
 # Check that we're in a project
 check_in_project || exit 1
 
-msg_warning "This will remove all containers, volumes, and networks for this project"
+msg_warning "This will remove all containers, volumes, networks, and images for this project"
 if ! confirm_yes_no "Are you sure you want to purge everything?"; then
   msg_info "Purge cancelled"
   exit 0
 fi
 
-# Stop and remove containers with spinner
-purge_cmd="${DOCKER_COMPOSE_BIN_CMD} down -v --remove-orphans"
+# Stop and remove containers with spinner, also remove locally built images
+purge_cmd="${DOCKER_COMPOSE_BIN_CMD} down -v --remove-orphans --rmi local"
 run_with_spinner "Stopping and removing containers" "$purge_cmd" || exit $?
 
 # Remove any remaining containers, volumes, and networks with project prefix
@@ -49,6 +49,38 @@ if [[ -n "${DC_ORO_NAME:-}" ]]; then
       # Filter out default networks (bridge, host, none) and shared networks
       if [[ -n "$network_name" ]] && [[ "$network_name" != "bridge" ]] && [[ "$network_name" != "host" ]] && [[ "$network_name" != "none" ]] && [[ "$network_name" != "dc_shared_net" ]]; then
         docker network rm "$network_name" 2>/dev/null || true
+      fi
+    done
+  fi
+  
+  # Remove project-specific images (built images with project name prefix)
+  # Docker Compose creates images with format: projectname_service (lowercase, with underscores)
+  # Convert project name to lowercase for matching (Docker Compose uses lowercase)
+  project_name_lower=$(echo "${DC_ORO_NAME:-}" | tr '[:upper:]' '[:lower:]' | tr '-' '_')
+  
+  # Find images by project name pattern (Docker Compose format: projectname_service)
+  # Also check for images matching container name patterns
+  project_images=$(docker images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | \
+    grep -E "^(${project_name_lower}|${DC_ORO_NAME:-})[_-](fpm|cli|websocket|ssh)" || true)
+  
+  if [[ -n "$project_images" ]]; then
+    echo "$project_images" | while read -r image_name; do
+      if [[ -n "$image_name" ]]; then
+        docker rmi -f "$image_name" 2>/dev/null || true
+      fi
+    done
+  fi
+  
+  # Also check for images with project name as prefix (handles various naming conventions)
+  all_project_images=$(docker images --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | \
+    grep -E "^(${project_name_lower}|${DC_ORO_NAME:-})" || true)
+  
+  if [[ -n "$all_project_images" ]]; then
+    echo "$all_project_images" | while read -r image_name; do
+      # Skip base images and external images (ghcr.io, docker.elastic.co, etc.)
+      if [[ -n "$image_name" ]] && \
+         [[ ! "$image_name" =~ ^(ghcr\.io|docker\.elastic\.co|opensearchproject|valkey|redis|mysql|rabbitmq|percona|xhgui|oroinc|busybox) ]]; then
+        docker rmi -f "$image_name" 2>/dev/null || true
       fi
     done
   fi

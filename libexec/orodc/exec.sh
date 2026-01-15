@@ -7,9 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/ui.sh"
 source "${SCRIPT_DIR}/lib/environment.sh"
+source "${SCRIPT_DIR}/lib/docker-utils.sh"
 
 # Check that we're in a project
 check_in_project || exit 1
+
+# Fix ownership for empty directories before running container
+# This ensures that empty directories have correct owner (developer) instead of root
+fix_empty_directory_ownership
 
 # Check if command is provided
 if [[ $# -eq 0 ]]; then

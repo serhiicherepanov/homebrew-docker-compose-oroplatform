@@ -66,6 +66,12 @@ exec_compose_command() {
   shift
   local docker_services="$*"
 
+  # Fix ownership for empty directories before running containers (run, exec commands)
+  # This ensures that empty directories have correct owner when containers are started
+  if [[ "$docker_cmd" == "run" ]] || [[ "$docker_cmd" == "exec" ]]; then
+    fix_empty_directory_ownership
+  fi
+
   # For build command, use spinner
   if [[ "$docker_cmd" == "build" ]]; then
     full_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} ${docker_cmd} ${right_flags[*]} ${right_options[*]} ${docker_services}"
@@ -86,10 +92,87 @@ exec_compose_command() {
   return $?
 }
 
+# Fix ownership for empty directories before starting containers
+# ROOT CAUSE: When bind mounting an empty directory, Docker may show it as root-owned
+# inside the container even if it's correctly owned on the host. This happens because
+# empty directories don't have files to inherit ownership from.
+# SOLUTION: Create a hidden marker file in empty directories to preserve ownership.
+# This is a known Docker behavior - empty directories need at least one file to maintain
+# correct ownership across bind mounts.
+# Usage: fix_empty_directory_ownership
+fix_empty_directory_ownership() {
+  if [[ -z "${DC_ORO_APPDIR:-}" ]] || [[ ! -d "${DC_ORO_APPDIR}" ]]; then
+    return 0
+  fi
+
+  # Only fix on Linux (macOS handles this differently)
+  if [[ "$(uname)" != "Linux" ]]; then
+    return 0
+  fi
+
+  # Check if directory is truly empty (no files at all, including hidden ones)
+  local dir_contents=$(ls -A "${DC_ORO_APPDIR}" 2>/dev/null || echo "")
+  if [[ -z "$dir_contents" ]]; then
+    # Directory is empty - create a hidden marker file to preserve ownership
+    # This prevents Docker from showing the directory as root-owned inside container
+    # Container will remove this marker file on startup
+    local marker_file="${DC_ORO_APPDIR}/.orodc.marker"
+    
+    # Get target UID/GID from environment or use current user's
+    local target_uid="${DC_ORO_PHP_UID:-$(id -u)}"
+    local target_gid="${DC_ORO_PHP_GID:-$(id -g)}"
+    
+    # Create marker file (this will be owned by current user)
+    # Use explicit error handling to ensure file is created
+    if ! touch "${marker_file}" 2>/dev/null; then
+      # If touch fails, try with sudo
+      if command -v sudo >/dev/null 2>&1; then
+        sudo -n touch "${marker_file}" 2>/dev/null || {
+          debug_log "docker-utils: could not create marker file ${marker_file} (permissions required)"
+          return 0
+        }
+      else
+        debug_log "docker-utils: could not create marker file ${marker_file} (permissions required)"
+        return 0
+      fi
+    fi
+    
+    # Ensure marker file exists before proceeding
+    if [[ ! -f "${marker_file}" ]]; then
+      debug_log "docker-utils: marker file ${marker_file} was not created"
+      return 0
+    fi
+    
+    # Ensure marker file and directory have correct ownership
+    local current_uid=$(stat -c '%u' "${DC_ORO_APPDIR}" 2>/dev/null || echo "")
+    local current_gid=$(stat -c '%g' "${DC_ORO_APPDIR}" 2>/dev/null || echo "")
+    
+    # Fix ownership if needed
+    if [[ -z "$current_uid" ]] || [[ -z "$current_gid" ]] || \
+       [[ "$current_uid" == "0" ]] || [[ "$current_gid" == "0" ]] || \
+       [[ "$current_uid" != "$target_uid" ]] || [[ "$current_gid" != "$target_gid" ]]; then
+      if chown "${target_uid}:${target_gid}" "${DC_ORO_APPDIR}" "${marker_file}" 2>/dev/null; then
+        debug_log "docker-utils: created marker file ${marker_file} and fixed ownership for empty directory ${DC_ORO_APPDIR} from ${current_uid}:${current_gid} to ${target_uid}:${target_gid}"
+      elif command -v sudo >/dev/null 2>&1 && sudo -n chown "${target_uid}:${target_gid}" "${DC_ORO_APPDIR}" "${marker_file}" 2>/dev/null; then
+        debug_log "docker-utils: created marker file ${marker_file} and fixed ownership for empty directory ${DC_ORO_APPDIR} from ${current_uid}:${current_gid} to ${target_uid}:${target_gid} (using sudo)"
+      else
+        debug_log "docker-utils: created marker file ${marker_file} but could not fix ownership for empty directory ${DC_ORO_APPDIR} (permissions required)"
+      fi
+    else
+      # Ownership is correct, but ensure marker file has correct ownership too
+      chown "${target_uid}:${target_gid}" "${marker_file}" 2>/dev/null || true
+      debug_log "docker-utils: created marker file ${marker_file} for empty directory ${DC_ORO_APPDIR}"
+    fi
+  fi
+}
+
 # Handle compose up command with separate build and start phases
 # Usage: handle_compose_up
 # Expects: docker_services, left_flags, left_options, right_flags, right_options
 handle_compose_up() {
+  # Fix ownership for empty directories before starting containers
+  fix_empty_directory_ownership
+
   # Get previous timing for statistics only
   prev_timing=$(get_previous_timing "up")
 

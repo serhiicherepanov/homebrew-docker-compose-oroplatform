@@ -442,6 +442,23 @@ initialize_environment() {
     export DC_ORO_APPDIR=$(find-up .env.orodc)
   fi
 
+  # If still not found, check for global configuration by project name (directory name)
+  if [[ -z "${DC_ORO_APPDIR:-}" ]]; then
+    local project_name=$(basename "$PWD")
+    if [[ "$project_name" == "$HOME" ]] || [[ -z "$project_name" ]] || [[ "$project_name" == "/" ]]; then
+      project_name="default"
+    fi
+    local global_config_file="${HOME}/.orodc/${project_name}/.env.orodc"
+    # Also check for old format global config
+    local old_global_config_file="${HOME}/.orodc/${project_name}.env.orodc"
+    
+    if [[ -f "$global_config_file" ]] || [[ -f "$old_global_config_file" ]]; then
+      # Global config exists for this directory name, use current directory as project
+      export DC_ORO_APPDIR="$PWD"
+      debug_log "initialize_environment: found global config for project '$project_name', using current directory as project"
+    fi
+  fi
+
   if [[ -z "${DC_ORO_APPDIR:-}" ]]; then
     if [ -z "$(ls -A "$PWD")" ]; then
       export DC_ORO_APPDIR="$PWD"

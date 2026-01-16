@@ -15,13 +15,42 @@ find-up() {
   echo "$path"
 }
 
-# Load .env file safely
+# Load .env file safely (from monolithic version)
 load_env_safe() {
   local env_file="$1"
+
+  # if the file exists
   if [[ -f "$env_file" ]]; then
-    set -a
-    source "$env_file"
-    set +a
+    # Read the file line by line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      # Trim leading/trailing whitespace (safe)
+      line="${line#"${line%%[![:space:]]*}"}"
+      line="${line%"${line##*[![:space:]]}"}"
+
+      # Skip empty lines and comments
+      [[ -z "$line" || "$line" == \#* ]] && continue
+
+      # Skip lines without =
+      [[ "$line" != *=* ]] && continue
+
+      local key="${line%%=*}"
+      local value="${line#*=}"
+
+      # Trim key and value safely
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+
+      # Strip existing quotes from value
+      value="${value%\"}"
+      value="${value#\"}"
+      value="${value%\'}"
+      value="${value#\'}"
+
+      # Export the variable safely
+      export "$key=$value"
+    done < "$env_file"
     
     # CRITICAL: Normalize ORO_MAILER_ENCRYPTION immediately after loading
     # Handle "null" (string) and empty string - set to tls
@@ -502,6 +531,24 @@ initialize_environment() {
     load_env_safe "$DC_ORO_APPDIR/.env-app"
     load_env_safe "$DC_ORO_APPDIR/.env-app.local"
     
+    # CRITICAL: Ensure ORO_DB_URL and DATABASE_URL are exported after loading files
+    # Sometimes set -a doesn't work properly, so explicitly export these variables
+    if [[ -n "${ORO_DB_URL:-}" ]]; then
+      export ORO_DB_URL
+    fi
+    if [[ -n "${DATABASE_URL:-}" ]]; then
+      export DATABASE_URL
+    fi
+    if [[ -n "${ORO_SEARCH_URL:-}" ]]; then
+      export ORO_SEARCH_URL
+    fi
+    if [[ -n "${ORO_MQ_DSN:-}" ]]; then
+      export ORO_MQ_DSN
+    fi
+    if [[ -n "${ORO_REDIS_URL:-}" ]]; then
+      export ORO_REDIS_URL
+    fi
+    
     # Load OroDC config files with priority: local > global
     # Global config is loaded first (lower priority)
     if [[ -f "$global_config_file" ]]; then
@@ -624,10 +671,66 @@ initialize_environment() {
     # Setup certificates
     setup_project_certificates
 
+    # Parse all service URLs first (like in monolithic version) - this sets all DC_ORO_* variables
+    # This must be done before schema detection to ensure all variables are available
+    
+    # Parse database URL - use ORO_DB_URL or DATABASE_URL
+    # CRITICAL: Check both variables explicitly, as they may not be exported properly
+    local db_url=""
+    if [[ -n "${ORO_DB_URL:-}" ]]; then
+      db_url="${ORO_DB_URL}"
+    elif [[ -n "${DATABASE_URL:-}" ]]; then
+      db_url="${DATABASE_URL}"
+    fi
+    
+    debug_log "initialize_environment: checking database URL, ORO_DB_URL=${ORO_DB_URL:-not set}, DATABASE_URL=${DATABASE_URL:-not set}, db_url=${db_url:-not set}"
+    
+    if [[ -n "$db_url" ]]; then
+      # Parse database URL to extract all connection parameters
+      parse_dsn_uri "$db_url" "database" "DC_ORO"
+      debug_log "initialize_environment: parsed database URL=$db_url, DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA:-not set}"
+      
+      # Ensure schema is set after parsing (parse_dsn_uri should set it, but verify)
+      if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]] && [[ "$db_url" =~ ^([^:]+):// ]]; then
+        local extracted_schema="${BASH_REMATCH[1]}"
+        case "$extracted_schema" in
+          postgres|postgresql|pgsql|pdo_pgsql)
+            export DC_ORO_DATABASE_SCHEMA="postgres"
+            ;;
+          mysql|mariadb|pdo_mysql)
+            export DC_ORO_DATABASE_SCHEMA="mysql"
+            ;;
+        esac
+        debug_log "initialize_environment: manually set DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA} from URL schema"
+      fi
+    fi
+    
+    # Set default database user/password if not set (like in monolithic version)
+    export DC_ORO_DATABASE_USER=${DC_ORO_DATABASE_USER:-app}
+    export DC_ORO_DATABASE_PASSWORD=${DC_ORO_DATABASE_PASSWORD:-app}
+    
+    # Parse search URL (Elasticsearch)
+    if [[ -n "${ORO_SEARCH_URL:-}" ]]; then
+      parse_dsn_uri "$ORO_SEARCH_URL" "search" "DC_ORO"
+      debug_log "initialize_environment: parsed search URL"
+    fi
+    
+    # Parse message queue DSN
+    if [[ -n "${ORO_MQ_DSN:-}" ]]; then
+      parse_dsn_uri "$ORO_MQ_DSN" "mq" "DC_ORO"
+      debug_log "initialize_environment: parsed MQ DSN"
+    fi
+    
+    # Parse Redis URL
+    if [[ -n "${ORO_REDIS_URL:-}" ]]; then
+      parse_dsn_uri "$ORO_REDIS_URL" "redis" "DC_ORO"
+      debug_log "initialize_environment: parsed Redis URL"
+    fi
+    
     # Detect database type: priority order:
     # 1. DC_ORO_DATABASE_SCHEMA from .env.orodc (explicit)
-    # 2. Auto-detect from DC_ORO_DATABASE_PORT (port-based detection)
-    # 3. Parse ORO_DB_URL (fallback)
+    # 2. DC_ORO_DATABASE_SCHEMA from parsed ORO_DB_URL/DATABASE_URL
+    # 3. Auto-detect from DC_ORO_DATABASE_PORT (port-based detection)
     
     # First: normalize schema from .env.orodc if already set
     if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
@@ -642,7 +745,69 @@ initialize_environment() {
       debug_log "initialize_environment: using schema=${schema_value} from .env.orodc"
     fi
 
-    # Second: auto-detect schema from port if schema is not set (port takes priority over ORO_DB_URL)
+    # Second: normalize schema from parsed URL if not set from .env.orodc
+    # Check if parse_dsn_uri set the schema variable
+    if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]] && [[ -n "${db_url:-}" ]]; then
+      # parse_dsn_uri should have set DC_ORO_DATABASE_SCHEMA, but check again after parsing
+      # Sometimes eval export might not work immediately, so re-check
+      if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
+        local schema_value="${DC_ORO_DATABASE_SCHEMA}"
+        if [[ "$schema_value" == "pgsql" ]] || [[ "$schema_value" == "postgresql" ]] || [[ "$schema_value" == "pdo_pgsql" ]]; then
+          schema_value="postgres"
+          export DC_ORO_DATABASE_SCHEMA="$schema_value"
+        elif [[ "$schema_value" == "mariadb" ]] || [[ "$schema_value" == "pdo_mysql" ]]; then
+          schema_value="mysql"
+          export DC_ORO_DATABASE_SCHEMA="$schema_value"
+        fi
+        debug_log "initialize_environment: using schema=${schema_value} from parsed database URL"
+        
+        # Save detected schema to .env.orodc for future use
+        local env_file="${DC_ORO_APPDIR}/.env.orodc"
+        if [[ -f "$env_file" ]]; then
+          if grep -q "^DC_ORO_DATABASE_SCHEMA=" "$env_file" 2>/dev/null; then
+            if [[ "$(uname)" == "Darwin" ]]; then
+              sed -i '' "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${schema_value}|" "$env_file"
+            else
+              sed -i "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${schema_value}|" "$env_file"
+            fi
+          else
+            echo "DC_ORO_DATABASE_SCHEMA=${schema_value}" >> "$env_file"
+          fi
+        fi
+      else
+        # parse_dsn_uri didn't set schema - try to extract it manually from URL
+        debug_log "initialize_environment: parse_dsn_uri didn't set schema, trying manual extraction"
+        if [[ "$db_url" =~ ^([^:]+):// ]]; then
+          local extracted_schema="${BASH_REMATCH[1]}"
+          case "$extracted_schema" in
+            postgres|postgresql|pgsql|pdo_pgsql)
+              export DC_ORO_DATABASE_SCHEMA="postgres"
+              ;;
+            mysql|mariadb|pdo_mysql)
+              export DC_ORO_DATABASE_SCHEMA="mysql"
+              ;;
+          esac
+          if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
+            debug_log "initialize_environment: manually extracted schema=${DC_ORO_DATABASE_SCHEMA} from URL"
+            # Save to .env.orodc
+            local env_file="${DC_ORO_APPDIR}/.env.orodc"
+            if [[ -f "$env_file" ]]; then
+              if grep -q "^DC_ORO_DATABASE_SCHEMA=" "$env_file" 2>/dev/null; then
+                if [[ "$(uname)" == "Darwin" ]]; then
+                  sed -i '' "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA}|" "$env_file"
+                else
+                  sed -i "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA}|" "$env_file"
+                fi
+              else
+                echo "DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA}" >> "$env_file"
+              fi
+            fi
+          fi
+        fi
+      fi
+    fi
+
+    # Third: auto-detect schema from port if schema is still not set
     if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]] && [[ -n "${DC_ORO_DATABASE_PORT:-}" ]]; then
       local detected_schema=""
       if [[ "${DC_ORO_DATABASE_PORT}" == "3306" ]]; then
@@ -668,33 +833,6 @@ initialize_environment() {
             echo "DC_ORO_DATABASE_SCHEMA=${detected_schema}" >> "$env_file"
           fi
         fi
-      fi
-    fi
-
-    # Third: parse ORO_DB_URL only if schema is still not set
-    if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]] && [[ -n "${ORO_DB_URL:-}" ]]; then
-      # Parse ORO_DB_URL to detect database schema (returns normalized: postgres or mysql)
-      parse_dsn_uri "${ORO_DB_URL}" "database" "DC_ORO"
-      
-      # If schema was detected, save it to .env.orodc for future use
-      if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
-        local env_file="${DC_ORO_APPDIR}/.env.orodc"
-        local schema_value="${DC_ORO_DATABASE_SCHEMA}"
-        
-        # Update or add DC_ORO_DATABASE_SCHEMA in .env.orodc
-        if grep -q "^DC_ORO_DATABASE_SCHEMA=" "$env_file" 2>/dev/null; then
-          if [[ "$(uname)" == "Darwin" ]]; then
-            sed -i '' "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${schema_value}|" "$env_file"
-          else
-            sed -i "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${schema_value}|" "$env_file"
-          fi
-        else
-          echo "DC_ORO_DATABASE_SCHEMA=${schema_value}" >> "$env_file"
-        fi
-        
-        debug_log "initialize_environment: detected schema=${schema_value} from ORO_DB_URL, saved to .env.orodc"
-      else
-        debug_log "initialize_environment: could not detect schema from ORO_DB_URL"
       fi
     fi
 

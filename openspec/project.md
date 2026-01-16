@@ -35,7 +35,7 @@ The tool is distributed as a Homebrew formula and manages multi-container Docker
   - Performance-optimized settings
 
 #### Official Images
-- **MySQL**: `mysql:8.4`
+- **MySQL**: `mysql:8.0-oracle`
 - **Cache**: `redis:6.2`, `redis:7.0`
 - **Search**: `elasticsearch:8.10.3`
 - **Queue**: `oroinc/rabbitmq:3.9-1-management-alpine`
@@ -322,15 +322,13 @@ OroDC dynamically assembles the Docker Compose command by conditionally includin
 
 3. **Database-Specific Configuration**:
    - **PostgreSQL** (`docker-compose-pgsql.yml`):
-     - Loaded when `DC_ORO_DATABASE_SCHEMA` is normalized to `postgres`
-     - Accepts values: `pgsql`, `postgres`, `postgresql`, `pdo_pgsql` (all normalized to `postgres`)
-     - Uses pre-built image: `ghcr.io/digitalspacestdio/orodc-pgsql:${DC_ORO_PGSQL_VERSION:-15.1}`
+     - Loaded when `DC_ORO_DATABASE_SCHEMA` matches: `pgsql`, `postgres`, `postgresql`
+     - Uses pre-built image: `ghcr.io/digitalspacestdio/orodc-pgsql:15.1`
      - Custom image includes pgpool2 and pg_repack extensions
      - Sets `DC_ORO_DATABASE_PORT=5432`
    - **MySQL/MariaDB** (`docker-compose-mysql.yml`):
-     - Loaded when `DC_ORO_DATABASE_SCHEMA` is normalized to `mysql`
-     - Accepts values: `mysql`, `mariadb`, `pdo_mysql` (all normalized to `mysql`)
-     - Uses official image: `mysql:8.4` (default) or `mariadb:10.11` (based on `DC_ORO_DATABASE_IMAGE`)
+     - Loaded when `DC_ORO_DATABASE_SCHEMA` matches: `mysql`, `mariadb`
+     - Uses official image: `mysql:8.0-oracle`
      - Sets `DC_ORO_DATABASE_PORT=3306`
 
 4. **User Custom Configuration** (`.docker-compose.user.yml`):
@@ -340,65 +338,34 @@ OroDC dynamically assembles the Docker Compose command by conditionally includin
 
 **Schema Detection Mechanism:**
 
-Database type detection follows a priority-based approach:
-
-1. **Primary Source: `.env.orodc` Configuration File**
-   - Configuration file location (priority: local > global):
-     - **Local**: `{PROJECT_DIR}/.env.orodc` (project root) - HIGHEST PRIORITY
-     - **Global**: `{HOME}/.orodc/{PROJECT_NAME}/.env.orodc` - LOWER PRIORITY
-   - If `DC_ORO_DATABASE_SCHEMA` is set in `.env.orodc` (created by `orodc init`), use that value
-   - Values are normalized: `pgsql`, `postgresql`, `pdo_pgsql` → `postgres`
-   - Values are normalized: `mariadb`, `pdo_mysql` → `mysql`
-
-2. **Fallback: Parse `ORO_DB_URL` Environment Variable**
-   - If `DC_ORO_DATABASE_SCHEMA` is not set, parse `ORO_DB_URL` from `.env-app` or `.env-app.local`
-   - Function `parse_dsn_uri()` extracts schema from DSN URI
-   - Example: `postgres://user:pass@host:5432/db` → `DC_ORO_DATABASE_SCHEMA=postgres`
-   - Example: `mysql://user:pass@host:3306/db` → `DC_ORO_DATABASE_SCHEMA=mysql`
-
-3. **Persist Detected Schema**
-   - If schema was detected from `ORO_DB_URL`, save it to `.env.orodc` for future use
-   - This ensures subsequent runs use the cached value without re-parsing
-
-4. **Include Appropriate Compose File**
-   - For `postgres`: Add `docker-compose-pgsql.yml` to compose command
-   - For `mysql`: Add `docker-compose-mysql.yml` to compose command
-   - Normalized schema values (`postgres` or `mysql`) are used for matching
-
-**Implementation Flow:**
-
 ```bash
-# 1. Load environment files (including .env.orodc)
-load_env_safe "$DC_ORO_APPDIR/.env"
-load_env_safe "$DC_ORO_APPDIR/.env-app"
-load_env_safe "$DC_ORO_APPDIR/.env-app.local"
-load_env_safe "$DC_ORO_APPDIR/.env.orodc"
+# 1. Parse ORO_DB_URL environment variable (from .env-app or .env-app.local)
+parse_dsn_uri "$ORO_DB_URL" "database" "DC_ORO"
 
-# 2. Check if DC_ORO_DATABASE_SCHEMA is already set from .env.orodc
-if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]] && [[ -n "${ORO_DB_URL:-}" ]]; then
-  # 3. Parse ORO_DB_URL to detect schema (normalizes to postgres/mysql)
-  parse_dsn_uri "${ORO_DB_URL}" "database" "DC_ORO"
-  
-  # 4. Save detected schema to .env.orodc for future use
-  if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
-    update_env_file "DC_ORO_DATABASE_SCHEMA" "${DC_ORO_DATABASE_SCHEMA}"
-  fi
-fi
+# 2. Extract schema (postgres, mysql, etc.) into DC_ORO_DATABASE_SCHEMA
+# Example: postgres://user:pass@host:5432/db → DC_ORO_DATABASE_SCHEMA=postgres
 
-# 5. Normalize schema value from .env.orodc if needed
-# (pgsql → postgres, mariadb → mysql)
-
-# 6. Include appropriate compose file based on normalized schema
-if [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]]; then
+# 3. Include appropriate compose file
+if [[ "${DC_ORO_DATABASE_SCHEMA}" == "pgsql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgres" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "postgresql" ]]; then
   DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-pgsql.yml"
-elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]]; then
+elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "mariadb" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]]; then
   DOCKER_COMPOSE_BIN_CMD="${DOCKER_COMPOSE_BIN_CMD} -f ${DC_ORO_CONFIG_DIR}/docker-compose-mysql.yml"
 fi
 ```
 
-**Note on Busybox Containers:**
+**Busybox Cleanup:**
 
-The base `docker-compose.yml` includes a dummy `database` service using busybox. When the correct database-specific compose file (`docker-compose-pgsql.yml` or `docker-compose-mysql.yml`) is loaded, Docker Compose automatically replaces the busybox service definition with the real database service. No explicit cleanup is needed - the correct compose file takes precedence.
+After loading database-specific compose files, OroDC automatically removes any running dummy database containers:
+
+```bash
+# Detect busybox database container
+SERVICE_DATABASE_ID=$(${DOCKER_COMPOSE_BIN_CMD} ps -q database)
+if [[ -n "$SERVICE_DATABASE_ID" ]] && docker inspect -f '{{ .Config.Image }}' "$SERVICE_DATABASE_ID" | grep -q 'busybox'; then
+  # Stop and remove dummy container
+  ${DOCKER_COMPOSE_BIN_CMD} stop database
+  ${DOCKER_COMPOSE_BIN_CMD} rm -f database
+fi
+```
 
 **Final Command Example:**
 
@@ -434,115 +401,15 @@ This shows:
 
 **Common Issues:**
 
-- **Database container not starting**: 
-  - Check `DC_ORO_DATABASE_SCHEMA` is set in `.env.orodc` (from `orodc init`)
-  - Or verify `ORO_DB_URL` is set correctly in `.env-app` or `.env-app.local`
-  - Use `DEBUG=1 orodc up -d` to see schema detection process
-
-- **Wrong database type detected**: 
-  - Schema values are normalized automatically (`pgsql` → `postgres`, `mariadb` → `mysql`)
-  - Check `.env.orodc` for `DC_ORO_DATABASE_SCHEMA` value
-  - If incorrect, manually set in `.env.orodc` or fix `ORO_DB_URL` format
-
-- **Schema not detected**: 
-  - Ensure `.env.orodc` exists with `DC_ORO_DATABASE_SCHEMA` (from `orodc init`)
-  - Or ensure `ORO_DB_URL` is in correct format: `postgres://user:pass@host:port/db` or `mysql://user:pass@host:port/db`
-  - Use `DEBUG=1` to see parsing output
+- **Database container not starting**: Check `ORO_DB_URL` is set correctly in `.env-app.local`
+- **Busybox database persists**: `DC_ORO_DATABASE_SCHEMA` not detected - verify DSN parsing with `DEBUG=1`
+- **Wrong database type**: Schema detection case-sensitive - use lowercase values in `ORO_DB_URL`
+- **Container keeps stopping**: Normal behavior during busybox → real database transition
 
 **Implementation Reference:**
-- Database detection: `libexec/orodc/lib/environment.sh` (`initialize_environment` function)
-- DSN parsing: `libexec/orodc/lib/common.sh` (`parse_dsn_uri` function)
-- Compose file inclusion: `libexec/orodc/lib/environment.sh` (database-specific compose file loading)
-- Schema persistence: `libexec/orodc/lib/environment.sh` (saves to `.env.orodc` after detection)
-
-#### Configuration Caching and Updates
-
-OroDC caches compose files locally for performance and automatically keeps them synchronized with the latest Homebrew package versions.
-
-**Cache Directory Structure:**
-
-```
-${DC_ORO_CONFIG_DIR}/    # Default: ~/.orodc/{project_name}
-├── compose/             # Cached compose files (synced from Homebrew)
-├── docker/              # Cached Dockerfiles and build contexts
-├── compose.yml          # Generated merged configuration
-├── ssh_id_ed25519*      # SSH keys for remote mode
-├── .cached_profiles     # Cached Docker Compose profiles
-├── .cached_cli_profiles # Cached CLI-specific profiles
-└── .xdebug_env         # XDebug environment cache
-```
-
-**Automatic Sync Mechanism:**
-
-Every time `orodc` runs, it automatically synchronizes compose files from Homebrew:
-
-```bash
-# bin/orodc:787
-${RSYNC_BIN} -r --delete \
-  --exclude='ssh_id_*' \
-  --exclude='.cached_*' \
-  --exclude='compose.yml' \
-  --exclude='.xdebug_env' \
-  "${DIR}/compose/" "${DC_ORO_CONFIG_DIR}/"
-```
-
-**Key Features:**
-- `--delete`: Removes outdated cached files that no longer exist in source
-- **Protects**: SSH keys, cached profiles, generated compose.yml, XDebug environment
-- **Ensures**: Every run uses latest compose files from Homebrew package
-- **Automatic**: No manual intervention required for updates
-
-**Configuration Generation Chain:**
-
-1. **Sync** (line 787): `rsync --delete` copies fresh files from Homebrew to cache
-2. **Build** (line 1273): `DOCKER_COMPOSE_BIN_CMD` constructed from cached files
-3. **Generate** (line 2334): `docker compose config` merges files into `compose.yml`
-
-```bash
-# Example: PostgreSQL application
-rsync ${HOMEBREW}/compose/ → ~/.orodc/myproject/
-
-DOCKER_COMPOSE_BIN_CMD="docker compose \
-  -f ~/.orodc/myproject/docker-compose.yml \
-  -f ~/.orodc/myproject/docker-compose-pgsql.yml"
-
-docker compose config > ~/.orodc/myproject/compose.yml
-```
-
-**Manual Cache Refresh:**
-
-Force cache clear and resynchronization:
-
-```bash
-orodc config-refresh
-```
-
-This command:
-- Removes `compose/` and `docker/` directories from cache
-- Deletes generated `compose.yml`
-- Clears cached profiles (`.cached_profiles`, `.cached_cli_profiles`)
-- Forces fresh sync on next `orodc` command
-
-**Use Cases for config-refresh:**
-- After Homebrew package reinstall/upgrade
-- When compose files not updating as expected
-- Troubleshooting stale configuration issues
-- After manual edits to cached files (not recommended)
-
-**Common Scenarios:**
-
-**Problem**: Old database config with `build:` section persists after Homebrew update
-**Cause**: Cached `docker-compose-pgsql.yml` not removed by old rsync (no --delete flag)
-**Solution**: Automatic with rsync --delete; manual with `orodc config-refresh`
-
-**Problem**: Changes in Homebrew compose files not reflected
-**Cause**: Cache not regenerated between runs
-**Solution**: Automatic sync on every `orodc` run; force with `orodc config-refresh`
-
-**Implementation Reference:**
-- Rsync sync: `bin/orodc:787-792`
-- Config refresh command: `bin/orodc:2254-2288`
-- Compose generation: `bin/orodc:2326-2327`
+- Database detection: `bin/orodc:1151` (parse_dsn_uri call)
+- Compose file inclusion: `bin/orodc:1259-1269`
+- Busybox cleanup: `bin/orodc:1270-1276`
 
 #### Multi-Stage Configuration
 Configuration hierarchy (lowest to highest priority):

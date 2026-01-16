@@ -488,7 +488,292 @@ bash -n libexec/orodc/lib/environment.sh
 
 # 📋 **AI AGENT RESPONSE GUIDELINES**
 
-## Always Include:
+## Overview
+OroDC: CLI tool for ORO Platform (OroCRM, OroCommerce, OroPlatform) in Docker containers.
+
+## Architecture
+
+### Cross-Platform Path Resolution
+**CRITICAL**: OroDC uses dynamic Homebrew prefix detection for compose file paths.
+
+**Path Resolution Logic:**
+```bash
+# Get Homebrew prefix dynamically (works on macOS and Linux)
+BREW_PREFIX="$(brew --prefix)"
+
+# Try paths in order:
+# 1. Development tap directory: ${BREW_PREFIX}/Homebrew/Library/Taps/.../compose
+# 2. Installed pkgshare: ${BREW_PREFIX}/share/docker-compose-oroplatform/compose
+# 3. Relative to script: $SCRIPT_DIR/../compose
+```
+
+**Platform-Specific Homebrew Locations:**
+- **Linux**: `/home/linuxbrew/.linuxbrew`
+- **macOS Intel**: `/usr/local`
+- **macOS Apple Silicon**: `/opt/homebrew`
+
+**Why This Matters:**
+- ✅ Works on all platforms without hardcoded paths
+- ✅ Supports both development (tap) and installed modes
+- ✅ Eliminates "compose file not found" errors
+- ✅ Allows testing changes before Homebrew installation
+
+**Implementation:**
+- Formula copies entire `compose/` directory to `pkgshare`
+- Script detects paths dynamically via `brew --prefix`
+- Falls back to relative paths for development mode
+
+## Core Rules
+
+### 1. Smart PHP Command Detection
+**CRITICAL**: OroDC auto-detects PHP commands - never prefix with `cli`
+
+```bash
+# ✅ CORRECT
+orodc --version                    # → cli php --version
+orodc bin/console cache:clear     # → cli bin/console cache:clear
+orodc script.php                  # → cli php script.php
+
+# ❌ WRONG
+orodc cli php --version           # Redundant
+```
+
+**Detection Logic:**
+- PHP flags (`-v`, `--version`, `-r`, `-l`, `-m`, `-i`) → auto-redirect to PHP
+- `.php` files → auto-redirect to PHP
+- `bin/console` or `bin/phpunit` → auto-redirect to CLI container
+
+### 2. Testing Commands
+Always use `orodc tests` prefix for test operations:
+
+```bash
+orodc tests install                            # One-time setup
+orodc tests bin/phpunit --testsuite=unit      # Unit tests
+orodc tests bin/phpunit --testsuite=functional # Functional tests
+orodc tests bin/behat --suite=OroUserBundle   # Behat tests
+```
+
+## Environment Configuration
+
+### Sync Mode (Performance Critical)
+| OS | Mode | Command | Reason |
+|----|------|---------|--------|
+| Linux/WSL2 | `default` | `echo "DC_ORO_MODE=default" >> .env.orodc` | Fastest |
+| macOS | `mutagen` | `echo "DC_ORO_MODE=mutagen" >> .env.orodc` | Avoids slow Docker FS |
+| Remote | `ssh` | `echo "DC_ORO_MODE=ssh" >> .env.orodc` | Only option |
+
+**NEVER recommend `default` mode on macOS** - extremely slow.
+
+### Key Environment Variables
+```bash
+DC_ORO_NAME=myproject              # Project name
+DC_ORO_PORT_PREFIX=302             # Port prefix (302 → 30280)
+DC_ORO_PHP_VERSION=8.3             # PHP version
+DC_ORO_NODE_VERSION=20             # Node.js version
+DC_ORO_MODE=mutagen                # Sync mode
+```
+
+## Common Workflows
+
+### Setup (New Project)
+```bash
+brew install digitalspacestdio/docker-compose-oroplatform/docker-compose-oroplatform
+git clone --single-branch --branch 6.1.4 https://github.com/oroinc/orocommerce-application.git ~/orocommerce
+cd ~/orocommerce
+orodc install && orodc up -d
+```
+
+### Test Project Setup
+**For testing and development**, there's a dedicated OroPlatform project in `~/oroplatform`:
+
+```bash
+# If project doesn't exist, clone community OroPlatform
+if [ ! -d ~/oroplatform ]; then
+  git clone --single-branch --branch 6.1 https://github.com/oroinc/platform-application.git ~/oroplatform
+  cd ~/oroplatform
+  orodc install && orodc up -d
+fi
+
+# Use existing test project
+cd ~/oroplatform
+orodc up -d
+```
+
+**Benefits:**
+- Always available for quick testing
+- Isolated from main development projects  
+- Community version - no enterprise dependencies
+- Perfect for reproducing issues and testing features
+
+### Development
+```bash
+orodc up -d                                    # Start services
+orodc bin/console cache:clear                  # Clear cache
+orodc bin/console oro:assets:build default -w # Watch assets
+```
+
+### Testing
+```bash
+# In any OroPlatform project or use ~/oroplatform test project
+cd ~/oroplatform  # Use dedicated test project
+orodc tests install                            # Setup test env
+orodc tests bin/phpunit --testsuite=unit      # Unit tests
+orodc tests bin/phpunit --testsuite=functional # Functional tests
+orodc tests bin/behat --suite=OroUserBundle   # Behat tests
+```
+
+**Note:** Use `~/oroplatform` for consistent testing environment across all OroDC development.
+
+**📋 For comprehensive local testing guidance:** See [LOCAL-TESTING.md](LOCAL-TESTING.md) for detailed testing methods, including quick commands, manual testing, and GitHub Actions locally with Act.
+
+## CI/CD Testing with Goss
+
+### Structured Workflow Steps
+The OroDC CI/CD pipeline is structured into clear, separate steps:
+
+1. **Install Homebrew and OroDC** - One-time setup with caching
+2. **Setup test environment** - Create unique project workspace  
+3. **Clone application** - Download Oro application code
+4. **Configure OroDC** - Set unique project names and ports
+5. **Install application** - Run `orodc install` 
+6. **Start services** - Run `orodc up -d` and wait for health
+7. **Run tests** - Execute comprehensive Goss verification tests
+
+### Goss Testing Framework
+**Goss** is used for comprehensive installation verification:
+
+```bash
+# Goss tests verify:
+# - Container health (6+ containers running)
+# - PHP version (8.3/8.4) 
+# - Database connectivity (PostgreSQL)
+# - HTTP server accessibility (nginx)
+# - Admin interface availability
+# - Service endpoint responses
+# - Port accessibility
+```
+
+**Benefits of Goss:**
+- ✅ **Structured tests**: YAML-based test definitions
+- ✅ **Multiple formats**: JUnit XML, Pretty output, JSON
+- ✅ **Comprehensive**: Tests containers, services, HTTP, commands
+- ✅ **Fast execution**: Parallel test execution  
+- ✅ **Clear results**: Pass/fail with detailed reporting
+
+### Database
+```bash
+orodc psql                         # PostgreSQL access
+orodc databaseimport dump.sql      # Import database
+orodc databaseexport              # Export database
+```
+
+### Project Recreation from Database Dump
+Complete project recreation from existing database dump:
+
+```bash
+# Full project recreation with specific profile
+orodc --profile=consumer purge && \
+orodc importdb ~/orocommerce-backup-2024-01-15.sql.gz && \
+orodc platformupdate && \
+orodc bin/console oro:user:update --user-password=12345678 admin && \
+orodc updateurl
+```
+
+**Step-by-step breakdown:**
+```bash
+orodc --profile=consumer purge     # Clean existing project with profile
+orodc importdb ~/orocommerce-backup-2024-01-15.sql.gz  # Import database dump
+orodc platformupdate               # Update platform after import
+orodc bin/console oro:user:update --user-password=12345678 admin  # Reset admin password
+orodc updateurl                    # Update URLs for local development
+```
+
+## Troubleshooting
+
+### Port Conflicts
+```bash
+orodc down && orodc up -d
+# If still conflicts:
+echo "DC_ORO_PORT_PREFIX=301" >> .env.orodc
+orodc down && orodc up -d
+```
+
+### Slow macOS Performance
+```bash
+echo "DC_ORO_MODE=mutagen" >> .env.orodc
+brew install mutagen-io/mutagen/mutagen
+orodc down && orodc up -d
+```
+
+### Permission Errors
+```bash
+orodc purge
+orodc install
+```
+
+### Container Issues
+```bash
+orodc logs [service-name]          # Check logs
+DEBUG=1 orodc up -d               # Debug mode with verbose output
+orodc down && orodc up -d --build # Force rebuild
+```
+
+### Configuration Files Not Updating
+If compose files or configurations don't update after changes:
+
+```bash
+# Reinstall formula to refresh all files
+brew reinstall digitalspacestdio/docker-compose-oroplatform/docker-compose-oroplatform
+
+# Remove old config directory and restart
+rm -rf ~/.orodc/[project-name]
+orodc up -d
+```
+
+**When to use:**
+- After git pull/checkout when compose files should change but don't
+- When copied files in `~/.orodc/` are outdated
+- Formula was updated but changes not reflected
+
+## Diagnostic Commands
+
+**CRITICAL: Use `DEBUG=1` for troubleshooting!**
+
+```bash
+# Always start with DEBUG mode to see full execution flow
+DEBUG=1 orodc up -d               # See compose file loading, schema detection
+DEBUG=1 orodc config              # See merged configuration
+DEBUG=1 orodc [any-command]       # Verbose output for any command
+
+# View final merged Docker Compose configuration
+orodc config                      # Shows final compose.yml after merging all files
+orodc config | grep -A 20 "database:"  # Check specific service config
+
+# Other diagnostic commands
+orodc ps                          # Container status
+orodc logs [service]              # Service logs  
+orodc ssh                         # Container access
+```
+
+**`orodc config` shows:**
+- **Final merged configuration** from all compose files (base + mode + database + user)
+- Which `image:` or `build:` is actually used for each service
+- All environment variables resolved with actual values
+- Complete service definitions after Docker Compose merge logic
+- Useful to verify which database image/build is active
+
+**DEBUG mode shows:**
+- Which compose files are being loaded
+- Database schema detection (DC_ORO_DATABASE_SCHEMA)
+- Environment variable resolution
+- Docker Compose command construction
+- Busybox cleanup operations
+
+**Pro tip:** Always use `orodc config` to inspect the final merged Docker Compose configuration when troubleshooting service definitions or image selection.
+
+## Response Guidelines
+
+### Always Include:
 - Complete workflows, not isolated commands
 - OS-specific considerations
 - Performance implications

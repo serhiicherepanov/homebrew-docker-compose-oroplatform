@@ -2134,19 +2134,11 @@ if [[ "$1" == "help" ]] || [[ "$1" == "man" ]]; then
     echo
     msg_highlight "Quick Commands:"
     echo "   orodc version                    # Show version"
-    echo "   orodc compose up -d              # Start services"
-    echo "   orodc compose down               # Stop services"
-    echo "   orodc compose ps                 # List services"
-    echo "   orodc init                       # Initialize new project"
-    echo
-    msg_highlight "Command Groups:"
-    echo "   orodc compose <cmd>              # Docker Compose commands"
-    echo "   orodc database <subcmd>          # Database operations"
-    echo "   orodc cache <subcmd>             # Cache operations"
-    echo "   orodc search <subcmd>            # Search reindex operations"
-    echo "   orodc tests <subcmd>             # Testing commands"
-    echo "   orodc proxy <subcmd>             # Proxy management"
-    echo "   orodc image <subcmd>             # Image building"
+    echo "   orodc install && orodc up -d     # Setup and start"
+    echo "   orodc --version                  # Check PHP version"
+    echo "   orodc psql -l                    # List databases"
+    echo "   orodc tests install              # Setup test environment"
+    echo "   orodc config-refresh             # Clear cached configs and force resync"
     echo
     echo "💡 For full documentation, run: brew info docker-compose-oroplatform"
   fi
@@ -4127,7 +4119,7 @@ fi
 is_orodc_special_command() {
   local cmd="$1"
   case "$cmd" in
-    psql|mysql|database-cli|ssh|cli|install|purge|help|man|tests|test|bash|config-refresh|refresh-config|init)
+    psql|mysql|database-cli|ssh|cli|install|purge|help|man|tests|test|bash|config-refresh|refresh-config)
       return 0
       ;;
     # Database import/export commands
@@ -4783,66 +4775,47 @@ if [[ -n "${DEBUG:-}" ]]; then
   echo "DEBUG: Checking purge condition: first_non_flag_arg='$first_non_flag_arg'" >&2
 fi
 
-# Handle init command (interactive service configuration)
-if [[ "$first_non_flag_arg" == "init" ]]; then
-  msg_header "OroDC Interactive Configuration"
-  msg_info "This will help you configure services for your project"
-  echo ""
+# Handle config-refresh command (clear cached compose files and force resync)
+if [[ "$first_non_flag_arg" == "config-refresh" ]] || [[ "$first_non_flag_arg" == "refresh-config" ]]; then
+  msg_info "Clearing cached compose files from ${DC_ORO_CONFIG_DIR}..."
   
-  ENV_FILE=".env.orodc"
+  # Remove compose files from config directory
+  if [[ -d "${DC_ORO_CONFIG_DIR}/compose" ]]; then
+    rm -rf "${DC_ORO_CONFIG_DIR}/compose"
+    msg_ok "Removed cached compose directory"
+  fi
   
-  # Load existing configuration if available
-  EXISTING_PHP_VERSION=""
-  EXISTING_NODE_VERSION=""
-  EXISTING_COMPOSER_VERSION=""
-  EXISTING_PHP_IMAGE=""
-  EXISTING_DB_SCHEMA=""
-  EXISTING_DB_VERSION=""
-  EXISTING_DB_IMAGE=""
-  EXISTING_SEARCH_ENGINE=""
-  EXISTING_SEARCH_VERSION=""
-  EXISTING_SEARCH_IMAGE=""
-  EXISTING_CACHE_ENGINE=""
-  EXISTING_CACHE_VERSION=""
-  EXISTING_CACHE_IMAGE=""
-  EXISTING_RABBITMQ_VERSION=""
-  EXISTING_RABBITMQ_IMAGE=""
+  if [[ -f "${DC_ORO_CONFIG_DIR}/compose.yml" ]]; then
+    rm -f "${DC_ORO_CONFIG_DIR}/compose.yml"
+    msg_ok "Removed cached compose.yml"
+  fi
   
-  if [[ -f "$ENV_FILE" ]]; then
-    msg_info "Found existing configuration, loading current values..."
-    
-    # Source the file to load variables
-    while IFS='=' read -r key value; do
-      # Skip comments and empty lines
-      [[ "$key" =~ ^#.*$ ]] && continue
-      [[ -z "$key" ]] && continue
-      
-      # Remove quotes if present
-      value="${value%\"}"
-      value="${value#\"}"
-      value="${value%\'}"
-      value="${value#\'}"
-      
-      case "$key" in
-        DC_ORO_PHP_VERSION) EXISTING_PHP_VERSION="$value" ;;
-        DC_ORO_NODE_VERSION) EXISTING_NODE_VERSION="$value" ;;
-        DC_ORO_COMPOSER_VERSION) EXISTING_COMPOSER_VERSION="$value" ;;
-        DC_ORO_PHP_IMAGE) EXISTING_PHP_IMAGE="$value" ;;
-        DC_ORO_DATABASE_SCHEMA) EXISTING_DB_SCHEMA="$value" ;;
-        DC_ORO_DATABASE_VERSION) EXISTING_DB_VERSION="$value" ;;
-        DC_ORO_DATABASE_IMAGE) EXISTING_DB_IMAGE="$value" ;;
-        DC_ORO_SEARCH_ENGINE) EXISTING_SEARCH_ENGINE="$value" ;;
-        DC_ORO_SEARCH_VERSION) EXISTING_SEARCH_VERSION="$value" ;;
-        DC_ORO_SEARCH_IMAGE) EXISTING_SEARCH_IMAGE="$value" ;;
-        DC_ORO_CACHE_ENGINE) EXISTING_CACHE_ENGINE="$value" ;;
-        DC_ORO_CACHE_VERSION) EXISTING_CACHE_VERSION="$value" ;;
-        DC_ORO_CACHE_IMAGE) EXISTING_CACHE_IMAGE="$value" ;;
-        DC_ORO_RABBITMQ_VERSION) EXISTING_RABBITMQ_VERSION="$value" ;;
-        DC_ORO_RABBITMQ_IMAGE) EXISTING_RABBITMQ_IMAGE="$value" ;;
-      esac
-    done < "$ENV_FILE"
-    
-    echo ""
+  # Remove docker directory
+  if [[ -d "${DC_ORO_CONFIG_DIR}/docker" ]]; then
+    rm -rf "${DC_ORO_CONFIG_DIR}/docker"
+    msg_ok "Removed cached docker directory"
+  fi
+  
+  # Remove cached profiles
+  if [[ -f "${DC_ORO_CONFIG_DIR}/.cached_profiles" ]]; then
+    rm -f "${DC_ORO_CONFIG_DIR}/.cached_profiles"
+    msg_ok "Removed cached profiles"
+  fi
+  
+  if [[ -f "${DC_ORO_CONFIG_DIR}/.cached_cli_profiles" ]]; then
+    rm -f "${DC_ORO_CONFIG_DIR}/.cached_cli_profiles"
+    msg_ok "Removed cached CLI profiles"
+  fi
+  
+  msg_ok "Cache cleared successfully!"
+  msg_info "Next orodc command will resync fresh compose files"
+  exit 0
+fi
+
+if [[ "$first_non_flag_arg" == "purge" ]]; then
+  # Handle purge command with proper flag processing
+  if [[ -n "${DEBUG:-}" ]]; then
+    echo "DEBUG: Processing purge command with flags: ${left_flags[@]} ${left_options[@]}" >&2
   fi
   
   # Function to get compatible Node.js versions based on PHP version (sorted newest to oldest)

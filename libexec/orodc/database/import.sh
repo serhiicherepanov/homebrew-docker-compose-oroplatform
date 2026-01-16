@@ -12,14 +12,14 @@ source "${SCRIPT_DIR}/../lib/environment.sh"
 # Note: initialize_environment is called by router (bin/orodc) before routing to this script
 check_in_project || exit 1
 
-# Parse domain replacement flags
+# Parse domain replacement flags first (before parse_compose_flags)
 FROM_DOMAIN=""
 TO_DOMAIN=""
 REMAINING_ARGS=()
 
 # Parse arguments for --from-domain and --to-domain
-i=1
-while [[ $i -le $# ]]; do
+i=0
+while [[ $i -lt $# ]]; do
   arg="${!i}"
   next_i=$((i + 1))
   next_arg="${!next_i:-}"
@@ -44,6 +44,114 @@ done
 
 # Parse remaining flags for left/right separation
 parse_compose_flags "${REMAINING_ARGS[@]}"
+
+# Validate domain format (alphanumeric, dots, hyphens, underscores only)
+validate_domain() {
+  local domain="$1"
+  # Check if domain contains only allowed characters: letters, numbers, dots, hyphens, underscores
+  # Also check it doesn't contain dangerous characters like quotes, semicolons, etc.
+  if [[ ! "$domain" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    return 1
+  fi
+  # Check domain has at least one dot (for TLD) or is a valid local domain
+  if [[ ! "$domain" =~ \. ]] && [[ ! "$domain" =~ \.local$ ]] && [[ ! "$domain" =~ ^localhost$ ]]; then
+    return 1
+  fi
+  # Check domain doesn't start or end with dot or hyphen
+  if [[ "$domain" =~ ^\. ]] || [[ "$domain" =~ \.$ ]] || [[ "$domain" =~ ^- ]] || [[ "$domain" =~ -$ ]]; then
+    return 1
+  fi
+  return 0
+}
+
+# Prompt for domain replacement (only in interactive mode)
+prompt_domain_replacement() {
+  local is_interactive="${1:-true}"
+  
+  # Skip if domains already provided via flags
+  if [[ -n "$FROM_DOMAIN" ]] && [[ -n "$TO_DOMAIN" ]]; then
+    # Validate domains provided via flags
+    if ! validate_domain "$FROM_DOMAIN"; then
+      msg_error "Invalid source domain format: ${FROM_DOMAIN}"
+      msg_info "Use only letters, numbers, dots, hyphens, and underscores."
+      FROM_DOMAIN=""
+      TO_DOMAIN=""
+      return 1
+    elif ! validate_domain "$TO_DOMAIN"; then
+      msg_error "Invalid target domain format: ${TO_DOMAIN}"
+      msg_info "Use only letters, numbers, dots, hyphens, and underscores."
+      FROM_DOMAIN=""
+      TO_DOMAIN=""
+      return 1
+    fi
+    return 0
+  fi
+  
+  # Only prompt in interactive mode
+  if [[ "$is_interactive" != "true" ]]; then
+    return 0
+  fi
+  
+  # Interactive domain replacement if not specified via flags
+  echo "" >&2
+  if confirm_yes_no "Replace domain names in database dump?"; then
+    # Get source domain with validation
+    while true; do
+      echo -n "Enter source domain (e.g., www.example.com): " >&2
+      read -r FROM_DOMAIN
+      if [[ -z "$FROM_DOMAIN" ]]; then
+        msg_warning "No source domain specified, skipping domain replacement" >&2
+        FROM_DOMAIN=""
+        TO_DOMAIN=""
+        break
+      elif validate_domain "$FROM_DOMAIN"; then
+        break
+      else
+        msg_error "Invalid domain format. Use only letters, numbers, dots, hyphens, and underscores." >&2
+        msg_info "Example: www.example.com" >&2
+      fi
+    done
+    
+    # Get target domain with validation (if source domain was provided)
+    if [[ -n "$FROM_DOMAIN" ]]; then
+      local default_target_domain="${DC_ORO_NAME:-unnamed}.docker.local"
+      while true; do
+        echo -n "Enter target domain [${default_target_domain}]: " >&2
+        read -r TO_DOMAIN
+        # Use default if empty
+        if [[ -z "$TO_DOMAIN" ]]; then
+          TO_DOMAIN="$default_target_domain"
+          msg_info "Using default target domain: ${TO_DOMAIN}" >&2
+          break
+        elif validate_domain "$TO_DOMAIN"; then
+          break
+        else
+          msg_error "Invalid domain format. Use only letters, numbers, dots, hyphens, and underscores." >&2
+          msg_info "Example: ${default_target_domain}" >&2
+        fi
+      done
+    fi
+  fi
+}
+
+# Build domain replacement sed command
+build_domain_replace_sed() {
+  DOMAIN_REPLACE_SED=""
+  if [[ -n "$FROM_DOMAIN" ]] && [[ -n "$TO_DOMAIN" ]]; then
+    # Escape special characters for sed (escape dot, slash, etc.)
+    FROM_DOMAIN_ESC=$(printf '%s\n' "$FROM_DOMAIN" | sed 's/[[\.*^$()+?{|]/\\&/g')
+    TO_DOMAIN_ESC=$(printf '%s\n' "$TO_DOMAIN" | sed 's/[[\.*^$()+?{|]/\\&/g')
+    # Replace domain only in safe contexts:
+    # 1. URLs: http://domain or https://domain
+    # 2. String values in SQL: 'domain' or "domain" (inside quotes)
+    # 3. Domain as standalone value (surrounded by spaces, quotes, or end of line)
+    # Avoid replacing in: #!/bin/bash, comments starting with --, etc.
+    # Remove lines starting with #!/ (shebang lines) - these are not valid SQL
+    # Then skip lines starting with # or ! (comments), then apply domain replacement
+    DOMAIN_REPLACE_SED="sed -E '/^[[:space:]]*#!/d' | sed -E '/^[[:space:]]*[#!]/! { s|https://${FROM_DOMAIN_ESC}|https://${TO_DOMAIN_ESC}|g; s|http://${FROM_DOMAIN_ESC}|http://${TO_DOMAIN_ESC}|g; s|${FROM_DOMAIN_ESC}|${TO_DOMAIN_ESC}|g; }' |"
+    msg_info "Domain replacement: ${FROM_DOMAIN} -> ${TO_DOMAIN}"
+  fi
+}
 
 # List available database dumps
 list_database_dumps() {
@@ -74,29 +182,19 @@ list_database_dumps() {
   printf '%s\n' "${dumps[@]}"
 }
 
-# Import database from var/backup/ folder or file path
-import_database_interactive() {
-  # Get first positional argument (dump file path)
-  local dump_file_arg="${REMAINING_ARGS[0]:-}"
+# Perform actual database import (shared logic for both interactive and non-interactive modes)
+perform_database_import() {
+  local selected_file="$1"
   
   # Check database schema is configured
   if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
     msg_error "Database schema not configured"
-    echo "" >&2
-    msg_info "To fix this issue, you can:" >&2
-    echo "  1. Set DC_ORO_DATABASE_SCHEMA in .env.orodc (e.g., DC_ORO_DATABASE_SCHEMA=postgres or DC_ORO_DATABASE_SCHEMA=mysql)" >&2
-    echo "  2. Set DC_ORO_DATABASE_PORT in .env.orodc (e.g., DC_ORO_DATABASE_PORT=5432 for PostgreSQL or 3306 for MySQL)" >&2
-    echo "  3. Set ORO_DB_URL in .env-app or .env-app.local (e.g., postgres://user:pass@host:5432/db)" >&2
-    echo "" >&2
-    msg_info "Current configuration:" >&2
-    echo "  DC_ORO_DATABASE_SCHEMA: ${DC_ORO_DATABASE_SCHEMA:-not set}" >&2
-    echo "  DC_ORO_DATABASE_PORT: ${DC_ORO_DATABASE_PORT:-not set}" >&2
-    echo "  ORO_DB_URL: ${ORO_DB_URL:-not set}" >&2
-    echo "" >&2
+    msg_info "Please ensure DC_ORO_DATABASE_SCHEMA is set in .env.orodc"
+    msg_info "Or run 'orodc init' to configure your project"
     exit 1
   fi
 
-  db_name="${DC_ORO_DATABASE_DBNAME:-oro_db}"
+  db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
   
   # Require user to confirm dropping existing database before import
   echo "" >&2
@@ -184,44 +282,24 @@ import_database_interactive() {
   local dumps=()
   local dump_files=()
 
+  # Get dumps using list_database_dumps (checks var/backup/ first, then var/)
+  while IFS= read -r file; do
+    if [[ -n "$file" ]]; then
+      dumps+=("$file")
+      dump_files+=("$file")
+    fi
+  done < <(list_database_dumps 2>/dev/null || true)
+
   local selected_file=""
 
-  # If file path provided as argument, use it directly
-  if [[ -n "$dump_file_arg" ]]; then
-    if [[ -r "$dump_file_arg" ]]; then
-      selected_file=$(realpath "$dump_file_arg")
-    elif [[ -r "${project_dir}/${dump_file_arg}" ]]; then
-      selected_file=$(realpath "${project_dir}/${dump_file_arg}")
-    elif [[ -r "${backup_dir}/${dump_file_arg}" ]]; then
-      selected_file=$(realpath "${backup_dir}/${dump_file_arg}")
-    elif [[ -r "${var_dir}/${dump_file_arg}" ]]; then
-      selected_file=$(realpath "${var_dir}/${dump_file_arg}")
-    else
-      msg_error "File not found or not readable: $dump_file_arg"
-      return 1
-    fi
-  fi
-
-  # If no file selected yet, try to find dumps and show interactive menu
-  if [[ -z "$selected_file" ]]; then
-    # Get dumps using list_database_dumps (checks var/backup/ first, then var/)
-    while IFS= read -r file; do
-      if [[ -n "$file" ]]; then
-        dumps+=("$file")
-        dump_files+=("$file")
-      fi
-    done < <(list_database_dumps 2>/dev/null || true)
-
-    if [[ ${#dumps[@]} -gt 0 ]]; then
+  if [[ ${#dumps[@]} -gt 0 ]]; then
     echo "" >&2
     msg_header "Available Database Dumps"
     echo "" >&2
     local i=1
     for dump in "${dumps[@]}"; do
-      local basename_dump
-      basename_dump=$(basename "$dump")
-      local size
-      size=$(du -h "$dump" 2>/dev/null | cut -f1)
+      local basename_dump=$(basename "$dump")
+      local size=$(du -h "$dump" 2>/dev/null | cut -f1)
       printf "  %2d) %s (%s)\n" "$i" "$basename_dump" "$size" >&2
       i=$((i + 1))
     done
@@ -249,27 +327,26 @@ import_database_interactive() {
       msg_error "No selection made"
       return 1
     fi
+  else
+    echo -n "Enter database dump file path: " >&2
+    read -r input
+
+    if [[ -z "$input" ]]; then
+      msg_error "No file provided"
+      return 1
+    fi
+
+    if [[ -r "$input" ]]; then
+      selected_file=$(realpath "$input")
+    elif [[ -r "${backup_dir}/${input}" ]]; then
+      selected_file=$(realpath "${backup_dir}/${input}")
+    elif [[ -r "${var_dir}/${input}" ]]; then
+      selected_file=$(realpath "${var_dir}/${input}")
+    elif [[ -r "${project_dir}/${input}" ]]; then
+      selected_file=$(realpath "${project_dir}/${input}")
     else
-      echo -n "Enter database dump file path: " >&2
-      read -r input
-
-      if [[ -z "$input" ]]; then
-        msg_error "No file provided"
-        return 1
-      fi
-
-      if [[ -r "$input" ]]; then
-        selected_file=$(realpath "$input")
-      elif [[ -r "${backup_dir}/${input}" ]]; then
-        selected_file=$(realpath "${backup_dir}/${input}")
-      elif [[ -r "${var_dir}/${input}" ]]; then
-        selected_file=$(realpath "${var_dir}/${input}")
-      elif [[ -r "${project_dir}/${input}" ]]; then
-        selected_file=$(realpath "${project_dir}/${input}")
-      else
-        msg_error "File not found or not readable: $input"
-        return 1
-      fi
+      msg_error "File not found or not readable: $input"
+      return 1
     fi
   fi
 
@@ -278,157 +355,60 @@ import_database_interactive() {
     return 1
   fi
 
-  # Use existing importdb logic
-  DB_DUMP="$selected_file"
-  DB_DUMP_BASENAME="${DB_DUMP##*/}"
-
-  # Get database connection parameters
-  # Use values from environment variables (set by parse_dsn_uri or .env files)
-  # Fallback to defaults only if not set
-  local db_host="${DC_ORO_DATABASE_HOST:-database}"
-  local db_user="${DC_ORO_DATABASE_USER:-oro_db_user}"
-  local db_password="${DC_ORO_DATABASE_PASSWORD:-oro_db_pass}"
-  local db_name="${DC_ORO_DATABASE_DBNAME:-oro_db}"
-  
-  # Determine port based on schema (with fallback)
-  local db_port="${DC_ORO_DATABASE_PORT:-}"
-  if [[ -z "$db_port" ]]; then
-    if [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_mysql" ]]; then
-      db_port="3306"
-    else
-      db_port="5432"  # Default to PostgreSQL
-    fi
-  fi
-
-  # Validate domain format (alphanumeric, dots, hyphens, underscores only)
-  validate_domain() {
-    local domain="$1"
-    # Check if domain contains only allowed characters: letters, numbers, dots, hyphens, underscores
-    # Also check it doesn't contain dangerous characters like quotes, semicolons, etc.
-    if [[ ! "$domain" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-      return 1
-    fi
-    # Check domain has at least one dot (for TLD) or is a valid local domain
-    if [[ ! "$domain" =~ \. ]] && [[ ! "$domain" =~ \.local$ ]] && [[ ! "$domain" =~ ^localhost$ ]]; then
-      return 1
-    fi
-    # Check domain doesn't start or end with dot or hyphen
-    if [[ "$domain" =~ ^\. ]] || [[ "$domain" =~ \.$ ]] || [[ "$domain" =~ ^- ]] || [[ "$domain" =~ -$ ]]; then
-      return 1
-    fi
-    return 0
-  }
-
-  # Interactive domain replacement if not specified via flags
-  if [[ -z "$FROM_DOMAIN" ]] || [[ -z "$TO_DOMAIN" ]]; then
-    echo "" >&2
-    if confirm_yes_no "Replace domain names in database dump?"; then
-      # Get source domain with validation
-      while true; do
-        echo -n "Enter source domain (e.g., www.example.com): " >&2
-        read -r FROM_DOMAIN
-        if [[ -z "$FROM_DOMAIN" ]]; then
-          msg_warning "No source domain specified, skipping domain replacement" >&2
-          FROM_DOMAIN=""
-          TO_DOMAIN=""
-          break
-        elif validate_domain "$FROM_DOMAIN"; then
-          break
-        else
-          msg_error "Invalid domain format. Use only letters, numbers, dots, hyphens, and underscores." >&2
-          msg_info "Example: www.example.com" >&2
-        fi
-      done
-      
-      # Get target domain with validation (if source domain was provided)
-      if [[ -n "$FROM_DOMAIN" ]]; then
-        local default_target_domain="${DC_ORO_NAME:-unnamed}.docker.local"
-        while true; do
-          echo -n "Enter target domain [${default_target_domain}]: " >&2
-          read -r TO_DOMAIN
-          # Use default if empty
-          if [[ -z "$TO_DOMAIN" ]]; then
-            TO_DOMAIN="$default_target_domain"
-            msg_info "Using default target domain: ${TO_DOMAIN}" >&2
-            break
-          elif validate_domain "$TO_DOMAIN"; then
-            break
-          else
-            msg_error "Invalid domain format. Use only letters, numbers, dots, hyphens, and underscores." >&2
-            msg_info "Example: ${default_target_domain}" >&2
-          fi
-        done
-      fi
-    fi
-  else
-    # Validate domains provided via flags
-    if ! validate_domain "$FROM_DOMAIN"; then
-      msg_error "Invalid source domain format: ${FROM_DOMAIN}" >&2
-      msg_info "Use only letters, numbers, dots, hyphens, and underscores." >&2
-      FROM_DOMAIN=""
-      TO_DOMAIN=""
-    elif ! validate_domain "$TO_DOMAIN"; then
-      msg_error "Invalid target domain format: ${TO_DOMAIN}" >&2
-      msg_info "Use only letters, numbers, dots, hyphens, and underscores." >&2
-      FROM_DOMAIN=""
-      TO_DOMAIN=""
-    fi
-  fi
-
-  # Build domain replacement sed command if domains are specified
-  DOMAIN_REPLACE_SED=""
-  if [[ -n "$FROM_DOMAIN" ]] && [[ -n "$TO_DOMAIN" ]]; then
-    # Escape special characters for sed (escape dot, slash, etc.)
-    FROM_DOMAIN_ESC=$(printf '%s\n' "$FROM_DOMAIN" | sed 's/[[\.*^$()+?{|]/\\&/g')
-    TO_DOMAIN_ESC=$(printf '%s\n' "$TO_DOMAIN" | sed 's/[[\.*^$()+?{|]/\\&/g')
-    # Replace domain only in safe contexts:
-    # 1. URLs: http://domain or https://domain
-    # 2. String values in SQL: 'domain' or "domain" (inside quotes)
-    # 3. Domain as standalone value (surrounded by spaces, quotes, or end of line)
-    # Avoid replacing in: #!/bin/bash, comments starting with --, etc.
-    # Remove lines starting with #!/ (shebang lines) - these are not valid SQL
-    # Then skip lines starting with # or ! (comments), then apply domain replacement
-    DOMAIN_REPLACE_SED="sed -E '/^[[:space:]]*#!/d' | sed -E '/^[[:space:]]*[#!]/! { s|https://${FROM_DOMAIN_ESC}|https://${TO_DOMAIN_ESC}|g; s|http://${FROM_DOMAIN_ESC}|http://${TO_DOMAIN_ESC}|g; s|${FROM_DOMAIN_ESC}|${TO_DOMAIN_ESC}|g; }' |"
-    msg_info "Domain replacement: ${FROM_DOMAIN} -> ${TO_DOMAIN}"
-  fi
-
-  # Build import command with explicit values (like export.sh)
-  if [[ $DC_ORO_DATABASE_SCHEMA == "pdo_pgsql" ]] || [[ $DC_ORO_DATABASE_SCHEMA == "postgres" ]];then
-    # PostgreSQL import command
-    if echo ${DB_DUMP_BASENAME} | grep -i 'sql\.gz$' > /dev/null; then
-      DB_IMPORT_CMD="zcat /dump.sql.gz | ${DOMAIN_REPLACE_SED} sed -E 's/^[[:space:]]*[Cc][Rr][Ee][Aa][Tt][Ee][[:space:]]+[Ff][Uu][Nn][Cc][Tt][Ii][Oo][Nn]/CREATE OR REPLACE FUNCTION/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr]:[[:space:]]*[a-zA-Z0-9_]+/Owner: ${db_user}/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr][[:space:]]+[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+/OWNER TO ${db_user}/g' | sed -E 's/[Ff][Oo][Rr][[:space:]]+[Rr][Oo][Ll][Ee][[:space:]]+[a-zA-Z0-9_]+/FOR ROLE ${db_user}/g' | sed -E 's/[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+;/TO ${db_user};/g' | sed -E '/^[[:space:]]*[Rr][Ee][Vv][Oo][Kk][Ee][[:space:]]+[Aa][Ll][Ll]/d' | sed -e '/SET transaction_timeout = 0;/d' | sed -E '/[\\]restrict|[\\]unrestrict/d' | PGPASSWORD='${db_password}' psql --set ON_ERROR_STOP=on -h '${db_host}' -p '${db_port}' -U '${db_user}' -d '${db_name}' -1 >/dev/null"
-    else
-      DB_IMPORT_CMD="cat /dump.sql | ${DOMAIN_REPLACE_SED} sed -E 's/^[[:space:]]*[Cc][Rr][Ee][Aa][Tt][Ee][[:space:]]+[Ff][Uu][Nn][Cc][Tt][Ii][Oo][Nn]/CREATE OR REPLACE FUNCTION/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr]:[[:space:]]*[a-zA-Z0-9_]+/Owner: ${db_user}/g' | sed -E 's/[Oo][Ww][Nn][Ee][Rr][[:space:]]+[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+/OWNER TO ${db_user}/g' | sed -E 's/[Ff][Oo][Rr][[:space:]]+[Rr][Oo][Ll][Ee][[:space:]]+[a-zA-Z0-9_]+/FOR ROLE ${db_user}/g' | sed -E 's/[Tt][Oo][[:space:]]+[a-zA-Z0-9_]+;/TO ${db_user};/g' | sed -E '/^[[:space:]]*[Rr][Ee][Vv][Oo][Kk][Ee][[:space:]]+[Aa][Ll][Ll]/d' | sed -e '/SET transaction_timeout = 0;/d' | sed -E '/[\\]restrict|[\\]unrestrict/d' | PGPASSWORD='${db_password}' psql --set ON_ERROR_STOP=on -h '${db_host}' -p '${db_port}' -U '${db_user}' -d '${db_name}' -1 >/dev/null"
-    fi
-  elif [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_mysql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]];then
-    # MySQL import command
-    if echo ${DB_DUMP_BASENAME} | grep -i 'sql\.gz$' > /dev/null; then
-      DB_IMPORT_CMD="zcat /dump.sql.gz | ${DOMAIN_REPLACE_SED} sed -E 's/[Dd][Ee][Ff][Ii][Nn][Ee][Rr][ ]*=[ ]*[^*]*\*/DEFINER=CURRENT_USER \*/' | MYSQL_PWD='${db_password}' mysql -h'${db_host}' -P'${db_port}' -u'${db_user}' '${db_name}'"
-    else
-      DB_IMPORT_CMD="cat /dump.sql | ${DOMAIN_REPLACE_SED} sed -E 's/[Dd][Ee][Ff][Ii][Nn][Ee][Rr][ ]*=[ ]*[^*]*\*/DEFINER=CURRENT_USER \*/' | MYSQL_PWD='${db_password}' mysql -h'${db_host}' -P'${db_port}' -u'${db_user}' '${db_name}'"
-    fi
-  else
-    msg_error "Unknown database schema: ${DC_ORO_DATABASE_SCHEMA}"
-    return 1
-  fi
-
-  # Show import details (context information)
-  msg_info "From: $DB_DUMP"
-  msg_info "File size: $(du -h "$DB_DUMP" | cut -f1)"
-  msg_info "Database: ${db_host}:${db_port}/${db_name}"
-
-  # Mount SQL dump file to /dump.sql or /dump.sql.gz in container
-  local dump_mount_path="/dump.sql"
-  if echo ${DB_DUMP_BASENAME} | grep -i 'sql\.gz$' > /dev/null; then
-    dump_mount_path="/dump.sql.gz"
-  fi
-  
-  import_cmd="${DOCKER_COMPOSE_BIN_CMD} ${left_flags[*]} ${left_options[*]} run --quiet -i --rm -v \"${DB_DUMP}:${dump_mount_path}\" database-cli bash -c \"$DB_IMPORT_CMD\""
-  run_with_spinner "Importing database" "$import_cmd" || return $?
-
-  msg_ok "Database imported successfully"
+  # Perform import using shared logic
+  perform_database_import "$selected_file"
 }
 
-# Run import with parsed arguments
-import_database_interactive
+# Import database from specific file (non-interactive mode)
+import_database_from_file() {
+  local selected_file="$1"
+  
+  # Prompt for domain replacement (non-interactive mode - only if flags provided)
+  prompt_domain_replacement "false"
+  
+  # Perform import using shared logic
+  perform_database_import "$selected_file"
+}
+
+# Import database with optional file argument
+import_database() {
+  local dump_file="${REMAINING_ARGS[0]:-}"
+  
+  # If file is provided as argument, use it directly
+  if [[ -n "$dump_file" ]]; then
+    # Resolve file path
+    local project_dir="${DC_ORO_APPDIR:-$PWD}"
+    local backup_dir="${project_dir}/var/backup"
+    local var_dir="${project_dir}/var"
+    local selected_file=""
+    
+    # Try to resolve file path
+    if [[ -r "$dump_file" ]]; then
+      selected_file=$(realpath "$dump_file")
+    elif [[ -r "${project_dir}/${dump_file}" ]]; then
+      selected_file=$(realpath "${project_dir}/${dump_file}")
+    elif [[ -r "${backup_dir}/${dump_file}" ]]; then
+      selected_file=$(realpath "${backup_dir}/${dump_file}")
+    elif [[ -r "${var_dir}/${dump_file}" ]]; then
+      selected_file=$(realpath "${var_dir}/${dump_file}")
+    else
+      msg_error "File not found or not readable: $dump_file"
+      exit 1
+    fi
+    
+    if [[ -z "$selected_file" ]] || [[ ! -r "$selected_file" ]]; then
+      msg_error "Invalid file: $selected_file"
+      exit 1
+    fi
+    
+    # Use the file directly in import function (non-interactive mode)
+    import_database_from_file "$selected_file"
+  else
+    # No file provided, use interactive mode
+    import_database_interactive
+  fi
+}
+
+# Run import
+import_database
 exit $?

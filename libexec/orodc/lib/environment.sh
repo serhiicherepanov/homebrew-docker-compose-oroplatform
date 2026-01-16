@@ -71,6 +71,79 @@ check_in_project() {
   return 0
 }
 
+# Get .env.orodc file paths using same logic as initialize_environment
+# Usage: get_env_file_paths
+# Sets: global_config_file and local_config_file (same as in initialize_environment)
+get_env_file_paths() {
+  # Use same logic as initialize_environment
+  local project_name=""
+  if [[ -n "${DC_ORO_APPDIR:-}" ]]; then
+    project_name=$(basename "$DC_ORO_APPDIR")
+  else
+    project_name=$(basename "$PWD")
+  fi
+  
+  # Normalize project name (same as initialize_environment)
+  if [[ "$project_name" == "$HOME" ]] || [[ -z "$project_name" ]] || [[ "$project_name" == "/" ]]; then
+    project_name="default"
+  fi
+  
+  # Return paths (same format as initialize_environment)
+  echo "${HOME}/.config/orodc/${project_name}.env.orodc|${DC_ORO_APPDIR:-$PWD}/.env.orodc"
+}
+
+# Update or add environment variable in .env.orodc file
+# Uses same logic as initialize_environment: saves to local if exists, otherwise to global
+# Usage: update_env_var "VAR_NAME" "value"
+update_env_var() {
+  local var_name="$1"
+  local var_value="$2"
+  
+  if [[ -z "$var_name" ]] || [[ -z "$var_value" ]]; then
+    debug_log "update_env_var: missing arguments (var_name=$var_name, var_value=$var_value)"
+    return 1
+  fi
+  
+  # Get paths using same logic as initialize_environment
+  local paths=$(get_env_file_paths)
+  local global_config_file=$(echo "$paths" | cut -d'|' -f1)
+  local local_config_file=$(echo "$paths" | cut -d'|' -f2)
+  
+  # Determine which file to use for saving (local if exists, otherwise global)
+  # Same priority as loading: local overrides global
+  local env_file=""
+  if [[ -f "$local_config_file" ]]; then
+    # Local file exists - save there (user explicitly created it to override)
+    env_file="$local_config_file"
+  else
+    # Local file doesn't exist - save to global
+    env_file="$global_config_file"
+  fi
+  
+  # Create file if it doesn't exist
+  if [[ ! -f "$env_file" ]]; then
+    # Create directory if needed (for global config)
+    mkdir -p "$(dirname "$env_file")"
+    touch "$env_file"
+    debug_log "update_env_var: created config file: $env_file"
+  fi
+  
+  # Update or add variable
+  if grep -q "^${var_name}=" "$env_file" 2>/dev/null; then
+    # Update existing variable
+    if [[ "$(uname)" == "Darwin" ]]; then
+      sed -i '' "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file"
+    else
+      sed -i "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file"
+    fi
+    debug_log "update_env_var: updated ${var_name}=${var_value} in $env_file"
+  else
+    # Add new variable
+    echo "${var_name}=${var_value}" >> "$env_file"
+    debug_log "update_env_var: added ${var_name}=${var_value} to $env_file"
+  fi
+}
+
 # Environment registry functions (simplified)
 get_environment_registry_file() {
   local registry_dir="${HOME}/.orodc"
@@ -248,7 +321,7 @@ list_environments() {
   local index=1
   
   # Collect environment data
-  while IFS='|' read -r name path last_used; do
+  while IFS='|' read -r name path _last_used; do
     env_names+=("$name")
     env_paths+=("$path")
     local status=$(get_environment_status "$name" "$path")
@@ -507,7 +580,7 @@ initialize_environment() {
 
   # Load environment files if in project
   if [[ -n "$DC_ORO_APPDIR" ]]; then
-    cd "$DC_ORO_APPDIR"
+    cd "$DC_ORO_APPDIR" || return 1
 
     # Determine project name for global config lookup
     local project_name=$(basename "$DC_ORO_APPDIR")
@@ -671,68 +744,50 @@ initialize_environment() {
     # Setup certificates
     setup_project_certificates
 
-    # Parse all service URLs first (like in monolithic version) - this sets all DC_ORO_* variables
-    # This must be done before schema detection to ensure all variables are available
-    
-    # Parse database URL - use ORO_DB_URL or DATABASE_URL
-    # CRITICAL: Check both variables explicitly, as they may not be exported properly
-    local db_url=""
-    if [[ -n "${ORO_DB_URL:-}" ]]; then
-      db_url="${ORO_DB_URL}"
-    elif [[ -n "${DATABASE_URL:-}" ]]; then
-      db_url="${DATABASE_URL}"
-    fi
-    
-    debug_log "initialize_environment: checking database URL, ORO_DB_URL=${ORO_DB_URL:-not set}, DATABASE_URL=${DATABASE_URL:-not set}, db_url=${db_url:-not set}"
-    
-    if [[ -n "$db_url" ]]; then
-      # Parse database URL to extract all connection parameters
-      parse_dsn_uri "$db_url" "database" "DC_ORO"
-      debug_log "initialize_environment: parsed database URL=$db_url, DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA:-not set}"
-      
-      # Ensure schema is set after parsing (parse_dsn_uri should set it, but verify)
-      if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]] && [[ "$db_url" =~ ^([^:]+):// ]]; then
-        local extracted_schema="${BASH_REMATCH[1]}"
-        case "$extracted_schema" in
-          postgres|postgresql|pgsql|pdo_pgsql)
-            export DC_ORO_DATABASE_SCHEMA="postgres"
-            ;;
-          mysql|mariadb|pdo_mysql)
-            export DC_ORO_DATABASE_SCHEMA="mysql"
-            ;;
-        esac
-        debug_log "initialize_environment: manually set DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA} from URL schema"
-      fi
-    fi
-    
-    # Set default database user/password if not set (like in monolithic version)
-    export DC_ORO_DATABASE_USER=${DC_ORO_DATABASE_USER:-app}
-    export DC_ORO_DATABASE_PASSWORD=${DC_ORO_DATABASE_PASSWORD:-app}
-    
-    # Parse search URL (Elasticsearch)
-    if [[ -n "${ORO_SEARCH_URL:-}" ]]; then
-      parse_dsn_uri "$ORO_SEARCH_URL" "search" "DC_ORO"
-      debug_log "initialize_environment: parsed search URL"
-    fi
-    
-    # Parse message queue DSN
-    if [[ -n "${ORO_MQ_DSN:-}" ]]; then
-      parse_dsn_uri "$ORO_MQ_DSN" "mq" "DC_ORO"
-      debug_log "initialize_environment: parsed MQ DSN"
-    fi
-    
-    # Parse Redis URL
-    if [[ -n "${ORO_REDIS_URL:-}" ]]; then
-      parse_dsn_uri "$ORO_REDIS_URL" "redis" "DC_ORO"
-      debug_log "initialize_environment: parsed Redis URL"
-    fi
-    
-    # Detect database type: priority order:
-    # 1. DC_ORO_DATABASE_SCHEMA from .env.orodc (explicit)
-    # 2. DC_ORO_DATABASE_SCHEMA from parsed ORO_DB_URL/DATABASE_URL
+    # Detect database type and connection parameters: priority order:
+    # 1. Parse ORO_DB_URL first (if available) - sets all variables (SCHEMA, USER, PASSWORD, HOST, PORT, DBNAME)
+    # 2. DC_ORO_DATABASE_SCHEMA from .env.orodc (explicit)
     # 3. Auto-detect from DC_ORO_DATABASE_PORT (port-based detection)
     
-    # First: normalize schema from .env.orodc if already set
+    # First: parse ORO_DB_URL if available (this sets all database variables)
+    if [[ -n "${ORO_DB_URL:-}" ]]; then
+      # Parse ORO_DB_URL to extract all database connection parameters
+      parse_dsn_uri "${ORO_DB_URL}" "database" "DC_ORO"
+      
+      # Save all detected variables to .env.orodc for future use (local if exists, otherwise global)
+      if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
+        update_env_var "DC_ORO_DATABASE_SCHEMA" "${DC_ORO_DATABASE_SCHEMA}"
+      fi
+      if [[ -n "${DC_ORO_DATABASE_USER:-}" ]]; then
+        update_env_var "DC_ORO_DATABASE_USER" "${DC_ORO_DATABASE_USER}"
+      fi
+      if [[ -n "${DC_ORO_DATABASE_PASSWORD:-}" ]]; then
+        update_env_var "DC_ORO_DATABASE_PASSWORD" "${DC_ORO_DATABASE_PASSWORD}"
+      fi
+      if [[ -n "${DC_ORO_DATABASE_DBNAME:-}" ]]; then
+        update_env_var "DC_ORO_DATABASE_DBNAME" "${DC_ORO_DATABASE_DBNAME}"
+      fi
+      if [[ -n "${DC_ORO_DATABASE_HOST:-}" ]]; then
+        update_env_var "DC_ORO_DATABASE_HOST" "${DC_ORO_DATABASE_HOST}"
+      fi
+      if [[ -n "${DC_ORO_DATABASE_PORT:-}" ]]; then
+        update_env_var "DC_ORO_DATABASE_PORT" "${DC_ORO_DATABASE_PORT}"
+      fi
+      
+      # Determine which file was used for saving (same logic as get_env_file_paths)
+      local save_paths=$(get_env_file_paths)
+      local save_global=$(echo "$save_paths" | cut -d'|' -f1)
+      local save_local=$(echo "$save_paths" | cut -d'|' -f2)
+      local env_file=""
+      if [[ -f "$save_local" ]]; then
+        env_file="$save_local"
+      else
+        env_file="$save_global"
+      fi
+      debug_log "initialize_environment: parsed ORO_DB_URL and saved all variables to ${env_file}"
+    fi
+    
+    # Second: normalize schema from .env.orodc if already set (but not from ORO_DB_URL)
     if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
       local schema_value="${DC_ORO_DATABASE_SCHEMA}"
       if [[ "$schema_value" == "pgsql" ]] || [[ "$schema_value" == "postgresql" ]] || [[ "$schema_value" == "pdo_pgsql" ]]; then
@@ -743,68 +798,6 @@ initialize_environment() {
         export DC_ORO_DATABASE_SCHEMA="$schema_value"
       fi
       debug_log "initialize_environment: using schema=${schema_value} from .env.orodc"
-    fi
-
-    # Second: normalize schema from parsed URL if not set from .env.orodc
-    # Check if parse_dsn_uri set the schema variable
-    if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]] && [[ -n "${db_url:-}" ]]; then
-      # parse_dsn_uri should have set DC_ORO_DATABASE_SCHEMA, but check again after parsing
-      # Sometimes eval export might not work immediately, so re-check
-      if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
-        local schema_value="${DC_ORO_DATABASE_SCHEMA}"
-        if [[ "$schema_value" == "pgsql" ]] || [[ "$schema_value" == "postgresql" ]] || [[ "$schema_value" == "pdo_pgsql" ]]; then
-          schema_value="postgres"
-          export DC_ORO_DATABASE_SCHEMA="$schema_value"
-        elif [[ "$schema_value" == "mariadb" ]] || [[ "$schema_value" == "pdo_mysql" ]]; then
-          schema_value="mysql"
-          export DC_ORO_DATABASE_SCHEMA="$schema_value"
-        fi
-        debug_log "initialize_environment: using schema=${schema_value} from parsed database URL"
-        
-        # Save detected schema to .env.orodc for future use
-        local env_file="${DC_ORO_APPDIR}/.env.orodc"
-        if [[ -f "$env_file" ]]; then
-          if grep -q "^DC_ORO_DATABASE_SCHEMA=" "$env_file" 2>/dev/null; then
-            if [[ "$(uname)" == "Darwin" ]]; then
-              sed -i '' "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${schema_value}|" "$env_file"
-            else
-              sed -i "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${schema_value}|" "$env_file"
-            fi
-          else
-            echo "DC_ORO_DATABASE_SCHEMA=${schema_value}" >> "$env_file"
-          fi
-        fi
-      else
-        # parse_dsn_uri didn't set schema - try to extract it manually from URL
-        debug_log "initialize_environment: parse_dsn_uri didn't set schema, trying manual extraction"
-        if [[ "$db_url" =~ ^([^:]+):// ]]; then
-          local extracted_schema="${BASH_REMATCH[1]}"
-          case "$extracted_schema" in
-            postgres|postgresql|pgsql|pdo_pgsql)
-              export DC_ORO_DATABASE_SCHEMA="postgres"
-              ;;
-            mysql|mariadb|pdo_mysql)
-              export DC_ORO_DATABASE_SCHEMA="mysql"
-              ;;
-          esac
-          if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
-            debug_log "initialize_environment: manually extracted schema=${DC_ORO_DATABASE_SCHEMA} from URL"
-            # Save to .env.orodc
-            local env_file="${DC_ORO_APPDIR}/.env.orodc"
-            if [[ -f "$env_file" ]]; then
-              if grep -q "^DC_ORO_DATABASE_SCHEMA=" "$env_file" 2>/dev/null; then
-                if [[ "$(uname)" == "Darwin" ]]; then
-                  sed -i '' "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA}|" "$env_file"
-                else
-                  sed -i "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA}|" "$env_file"
-                fi
-              else
-                echo "DC_ORO_DATABASE_SCHEMA=${DC_ORO_DATABASE_SCHEMA}" >> "$env_file"
-              fi
-            fi
-          fi
-        fi
-      fi
     fi
 
     # Third: auto-detect schema from port if schema is still not set
@@ -820,19 +813,28 @@ initialize_environment() {
         export DC_ORO_DATABASE_SCHEMA="$detected_schema"
         debug_log "initialize_environment: auto-detected schema=${detected_schema} from port ${DC_ORO_DATABASE_PORT}"
         
-        # Save detected schema to .env.orodc for future use
-        local env_file="${DC_ORO_APPDIR}/.env.orodc"
-        if [[ -f "$env_file" ]]; then
-          if grep -q "^DC_ORO_DATABASE_SCHEMA=" "$env_file" 2>/dev/null; then
-            if [[ "$(uname)" == "Darwin" ]]; then
-              sed -i '' "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${detected_schema}|" "$env_file"
-            else
-              sed -i "s|^DC_ORO_DATABASE_SCHEMA=.*|DC_ORO_DATABASE_SCHEMA=${detected_schema}|" "$env_file"
-            fi
-          else
-            echo "DC_ORO_DATABASE_SCHEMA=${detected_schema}" >> "$env_file"
-          fi
-        fi
+        # Save detected schema to .env.orodc for future use (local if exists, otherwise global)
+        update_env_var "DC_ORO_DATABASE_SCHEMA" "$detected_schema"
+      fi
+    fi
+
+    # Fourth: try to detect schema from docker-compose files if still not set
+    # Files are synced from compose/ directory, so they should exist
+    if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
+      # Check if docker-compose-pgsql.yml exists (indicates PostgreSQL)
+      if [[ -f "${DC_ORO_CONFIG_DIR}/docker-compose-pgsql.yml" ]]; then
+        export DC_ORO_DATABASE_SCHEMA="postgres"
+        debug_log "initialize_environment: detected schema=postgres from docker-compose-pgsql.yml"
+        
+        # Save to .env.orodc (local if exists, otherwise global)
+        update_env_var "DC_ORO_DATABASE_SCHEMA" "postgres"
+      # Check if docker-compose-mysql.yml exists (indicates MySQL)
+      elif [[ -f "${DC_ORO_CONFIG_DIR}/docker-compose-mysql.yml" ]]; then
+        export DC_ORO_DATABASE_SCHEMA="mysql"
+        debug_log "initialize_environment: detected schema=mysql from docker-compose-mysql.yml"
+        
+        # Save to .env.orodc (local if exists, otherwise global)
+        update_env_var "DC_ORO_DATABASE_SCHEMA" "mysql"
       fi
     fi
 
@@ -840,10 +842,10 @@ initialize_environment() {
     # Always regenerate if schema is set to ensure consistency with port
     if [[ -n "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
       local db_schema="${DC_ORO_DATABASE_SCHEMA}"
-      local db_user="${DC_ORO_DATABASE_USER:-app_db_user}"
-      local db_password="${DC_ORO_DATABASE_PASSWORD:-app_db_pass}"
+      local db_user="${DC_ORO_DATABASE_USER:-oro_db_user}"
+      local db_password="${DC_ORO_DATABASE_PASSWORD:-oro_db_pass}"
       local db_host="${DC_ORO_DATABASE_HOST:-database}"
-      local db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
+      local db_name="${DC_ORO_DATABASE_DBNAME:-oro_db}"
       
       # Use port from DC_ORO_DATABASE_PORT if set, otherwise determine from schema
       local db_port="${DC_ORO_DATABASE_PORT:-}"

@@ -41,16 +41,22 @@ export_database_interactive() {
   DB_DUMP_BASENAME=$(echo "${DB_DUMP##*/}")
   touch "${DB_DUMP}"
 
-  # Set defaults for database connection parameters
+  # Get database connection parameters
+  # Use values from environment variables (set by parse_dsn_uri or .env files)
+  # Fallback to defaults only if not set
   local db_host="${DC_ORO_DATABASE_HOST:-database}"
-  local db_port="${DC_ORO_DATABASE_PORT:-5432}"
-  local db_user="${DC_ORO_DATABASE_USER:-app_db_user}"
-  local db_password="${DC_ORO_DATABASE_PASSWORD:-app_db_pass}"
-  local db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
+  local db_user="${DC_ORO_DATABASE_USER:-oro_db_user}"
+  local db_password="${DC_ORO_DATABASE_PASSWORD:-oro_db_pass}"
+  local db_name="${DC_ORO_DATABASE_DBNAME:-oro_db}"
   
-  # Adjust port for MySQL
-  if [[ "${DC_ORO_DATABASE_SCHEMA}" == "mariadb" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_mysql" ]]; then
-    db_port="${DC_ORO_DATABASE_PORT:-3306}"
+  # Determine port based on schema (with fallback)
+  local db_port="${DC_ORO_DATABASE_PORT:-}"
+  if [[ -z "$db_port" ]]; then
+    if [[ "${DC_ORO_DATABASE_SCHEMA}" == "mariadb" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "mysql" ]] || [[ "${DC_ORO_DATABASE_SCHEMA}" == "pdo_mysql" ]]; then
+      db_port="3306"
+    else
+      db_port="5432"  # Default to PostgreSQL
+    fi
   fi
 
   # Show export details (context information)

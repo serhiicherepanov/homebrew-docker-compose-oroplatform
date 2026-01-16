@@ -15,10 +15,16 @@ check_in_project || exit 1
 # Recreate database container with volumes removal
 if [[ -z "${DC_ORO_DATABASE_SCHEMA:-}" ]]; then
   msg_error "Database schema not configured"
+  echo "" >&2
+  msg_info "To fix this issue, you can:" >&2
+  echo "  1. Set DC_ORO_DATABASE_SCHEMA in .env.orodc (e.g., DC_ORO_DATABASE_SCHEMA=postgres or DC_ORO_DATABASE_SCHEMA=mysql)" >&2
+  echo "  2. Set DC_ORO_DATABASE_PORT in .env.orodc (e.g., DC_ORO_DATABASE_PORT=5432 for PostgreSQL or 3306 for MySQL)" >&2
+  echo "  3. Set ORO_DB_URL in .env-app or .env-app.local (e.g., postgres://user:pass@host:5432/db)" >&2
+  echo "" >&2
   exit 1
 fi
 
-db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
+db_name="${DC_ORO_DATABASE_DBNAME:-oro_db}"
 echo "" >&2
 msg_danger "This will DELETE ALL DATA in database '${db_name}'!"
 if ! confirm_yes_no "Continue?"; then

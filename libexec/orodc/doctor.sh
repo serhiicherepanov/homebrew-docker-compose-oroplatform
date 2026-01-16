@@ -759,9 +759,9 @@ add_database_connection_checks() {
     db_port="${DC_ORO_DATABASE_PORT:-3306}"
   fi
   local db_schema="${DC_ORO_DATABASE_SCHEMA:-${default_db_schema}}"
-  local db_user="${DC_ORO_DATABASE_USER:-app_db_user}"
-  local db_password="${DC_ORO_DATABASE_PASSWORD:-app_db_pass}"
-  local db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
+  local db_user="${DC_ORO_DATABASE_USER:-oro_db_user}"
+  local db_password="${DC_ORO_DATABASE_PASSWORD:-oro_db_pass}"
+  local db_name="${DC_ORO_DATABASE_DBNAME:-oro_db}"
   
   # Normalize database schema
   if [[ "$db_schema" == "pdo_pgsql" ]] || [[ "$db_schema" == "postgresql" ]] || [[ "$db_schema" == "pgsql" ]] || [[ "$db_schema" == "postgres" ]]; then
@@ -923,9 +923,9 @@ generate_unified_goss_config() {
     db_port="${DC_ORO_DATABASE_PORT:-3306}"
   fi
   local db_schema="${DC_ORO_DATABASE_SCHEMA:-${default_db_schema}}"
-  local db_user="${DC_ORO_DATABASE_USER:-app_db_user}"
-  local db_password="${DC_ORO_DATABASE_PASSWORD:-app_db_pass}"
-  local db_name="${DC_ORO_DATABASE_DBNAME:-app_db}"
+  local db_user="${DC_ORO_DATABASE_USER:-oro_db_user}"
+  local db_password="${DC_ORO_DATABASE_PASSWORD:-oro_db_pass}"
+  local db_name="${DC_ORO_DATABASE_DBNAME:-oro_db}"
   
   # Normalize database schema
   if [[ "$db_schema" == "pdo_pgsql" ]] || [[ "$db_schema" == "postgresql" ]] || [[ "$db_schema" == "pgsql" ]] || [[ "$db_schema" == "postgres" ]]; then

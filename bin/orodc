@@ -213,7 +213,7 @@ case "$1" in
     ;;
 
   # Database commands - route to database/*.sh modules
-  database)
+  database|db)
     shift
     case "$1" in
       mysql)

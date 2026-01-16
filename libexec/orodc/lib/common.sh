@@ -161,22 +161,86 @@ get_first_non_flag_arg() {
 # Example: parse_dsn_uri "postgres://user:pass@host:5432/db" "database" "DC_ORO"
 # Sets: DC_ORO_DATABASE_SCHEMA, DC_ORO_DATABASE_HOST, DC_ORO_DATABASE_PORT, etc.
 parse_dsn_uri() {
-  local dsn_uri="$1"
-  local component_prefix="$2"
-  local env_prefix="$3"
-  
-  if [[ -z "$dsn_uri" ]]; then
-    return 0
+  local uri="$1"
+  local name="$2"
+  local prefix="$3"
+
+  [[ -n "$uri" && -n "$name" ]] || return 0
+
+  local host_alias
+  host_alias=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+
+  local var_prefix=""
+  if [[ -n "$prefix" ]]; then
+    var_prefix="$(echo "$prefix" | tr '[:lower:]' '[:upper:]')_"
   fi
-  
-  # Convert component_prefix to uppercase (compatible with older bash)
-  local component_upper=$(echo "$component_prefix" | tr '[:lower:]' '[:upper:]')
-  
-  # Extract schema (postgres, mysql, etc.)
-  local schema=""
-  if [[ "$dsn_uri" =~ ^([^:]+):// ]]; then
-    schema="${BASH_REMATCH[1]}"
-    # Normalize schema names
+  var_prefix+=$(echo "$name" | tr '[:lower:]' '[:upper:]')_
+
+  local schema rest
+  if [[ "$uri" == *"://"* ]]; then
+    schema="${uri%%://*}"
+    rest="${uri#*://}"
+  elif [[ "$uri" == *: ]]; then
+    schema="${uri%:}"
+    rest=""
+  else
+    schema="$uri"
+    rest=""
+  fi
+
+  local query=""
+  if [[ "$rest" == *\?* ]]; then
+    query="${rest#*\?}"
+    rest="${rest%%\?*}"
+  fi
+
+  local user="" password="" host="" port="" dbname=""
+
+  # Special case: SQLite
+  if [[ "$schema" == "sqlite" ]]; then
+    if [[ "$uri" == "sqlite::memory:" ]]; then
+      dbname=":memory:"
+    else
+      local sqlite_path="${uri#sqlite://}"
+      dbname="${sqlite_path%%\?*}"
+    fi
+
+    eval "export ${var_prefix}SCHEMA=\"\$schema\""
+    eval "export ${var_prefix}DBNAME=\"\$dbname\""
+    eval "export ${var_prefix}QUERY=\"\$query\""
+    eval "export ${var_prefix}URI=\"\$uri\""
+    return
+  fi
+
+  # If rest includes @, extract user/password
+  if [[ "$rest" == *@* ]]; then
+    local userinfo="${rest%%@*}"
+    rest="${rest#*@}"
+    user="${userinfo%%:*}"
+    password="${userinfo#*:}"
+    [[ "$user" == "$password" ]] && password="app"
+  fi
+
+  # Extract host, port, dbname
+  if [[ "$rest" == *:* ]]; then
+    host="${rest%%:*}"
+    port="${rest#*:}"
+    if [[ "$port" == */* ]]; then
+      dbname="${port#*/}"
+      port="${port%%/*}"
+    fi
+  elif [[ "$rest" == */* ]]; then
+    host="${rest%%/*}"
+    dbname="${rest#*/}"
+  elif [[ -n "$rest" ]]; then
+    host="$rest"
+  fi
+
+  # Always use container host for services (like in monolithic version)
+  host="$host_alias"
+
+  # Normalize schema names for database
+  if [[ "$name" == "database" ]]; then
     case "$schema" in
       postgres|postgresql|pgsql|pdo_pgsql)
         schema="postgres"
@@ -185,42 +249,38 @@ parse_dsn_uri() {
         schema="mysql"
         ;;
     esac
-    # Export schema variable
-    eval "export ${env_prefix}_${component_upper}_SCHEMA=\"$schema\""
-    debug_log "parse_dsn_uri: detected schema=$schema from $dsn_uri"
   fi
+
+  # Reconstruct URI only if it's not a simple scheme:
+  local clean_uri=""
+  if [[ "$schema" == "sqlite" && "$dbname" == ":memory:" ]]; then
+    clean_uri="sqlite::memory:"
+  elif [[ "$schema" == "sqlite" ]]; then
+    clean_uri="sqlite://$dbname"
+  elif [[ "$schema" == "dbal" && -z "$rest" ]]; then
+    clean_uri="${schema}:"
+  else
+    clean_uri="${schema}://"
+    [[ -n "$user" ]] && clean_uri+="${user}"
+    [[ -n "$password" ]] && clean_uri+=":${password}"
+    [[ -n "$user" || -n "$password" ]] && clean_uri+="@"
+    clean_uri+="${host}"
+    [[ -n "$port" ]] && clean_uri+=":${port}"
+    [[ -n "$dbname" ]] && clean_uri+="/${dbname}"
+    [[ -n "$query" ]] && clean_uri+="?${query}"
+  fi
+
+  # Export everything
+  eval "export ${var_prefix}SCHEMA=\"\$schema\""
+  eval "export ${var_prefix}USER=\"\$user\""
+  eval "export ${var_prefix}PASSWORD=\"\$password\""
+  eval "export ${var_prefix}HOST=\"\$host\""
+  eval "export ${var_prefix}PORT=\"\$port\""
+  eval "export ${var_prefix}DBNAME=\"\$dbname\""
+  eval "export ${var_prefix}QUERY=\"\$query\""
+  eval "export ${var_prefix}URI=\"\$clean_uri\""
   
-  # Extract host, port, user, password, database name
-  if [[ "$dsn_uri" =~ ^[^:]+://([^:@]+):([^@]+)@([^:/]+):([0-9]+)/(.+)$ ]]; then
-    local user="${BASH_REMATCH[1]}"
-    local password="${BASH_REMATCH[2]}"
-    local host="${BASH_REMATCH[3]}"
-    local port="${BASH_REMATCH[4]}"
-    local dbname="${BASH_REMATCH[5]}"
-    
-    # Export variables using eval for dynamic names
-    eval "export ${env_prefix}_${component_upper}_USER=\"$user\""
-    eval "export ${env_prefix}_${component_upper}_PASSWORD=\"$password\""
-    eval "export ${env_prefix}_${component_upper}_HOST=\"$host\""
-    eval "export ${env_prefix}_${component_upper}_PORT=\"$port\""
-    eval "export ${env_prefix}_${component_upper}_DBNAME=\"$dbname\""
-    
-    debug_log "parse_dsn_uri: extracted host=$host port=$port user=$user dbname=$dbname"
-  elif [[ "$dsn_uri" =~ ^[^:]+://([^:@]+)@([^:/]+):([0-9]+)/(.+)$ ]]; then
-    # No password case
-    local user="${BASH_REMATCH[1]}"
-    local host="${BASH_REMATCH[2]}"
-    local port="${BASH_REMATCH[3]}"
-    local dbname="${BASH_REMATCH[4]}"
-    
-    # Export variables using eval for dynamic names
-    eval "export ${env_prefix}_${component_upper}_USER=\"$user\""
-    eval "export ${env_prefix}_${component_upper}_HOST=\"$host\""
-    eval "export ${env_prefix}_${component_upper}_PORT=\"$port\""
-    eval "export ${env_prefix}_${component_upper}_DBNAME=\"$dbname\""
-    
-    debug_log "parse_dsn_uri: extracted host=$host port=$port user=$user dbname=$dbname (no password)"
-  fi
+  debug_log "parse_dsn_uri: parsed $name URI, schema=$schema host=$host port=$port user=$user dbname=$dbname"
 }
 
 # Parse compose flags into left/right arrays

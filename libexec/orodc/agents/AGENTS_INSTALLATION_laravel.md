@@ -23,7 +23,31 @@ orodc exec ls -la
 
 **IMPORTANT**: Project creation commands MUST be run in an empty directory.
 
-### Step 2: Create Laravel Project
+### Step 2: Extract Environment Variables
+
+**REQUIRED**: Before running installation commands, extract environment variables needed for configuration:
+
+```bash
+# Primary command: Get all OroDC service connection variables
+orodc exec env | grep ORO_
+
+# Or get all environment variables
+orodc exec env
+
+# Filter by specific service:
+orodc exec env | grep -i database
+```
+
+**IMPORTANT**: 
+- **MUST be done BEFORE Step 4 (Configure Environment)** - you'll need these variables for `.env` configuration
+- Save these variables or keep them accessible
+- Key variables you'll need:
+  - `DB_HOST` - Database host (usually "database")
+  - `DB_DATABASE` - Database name (from `ORO_DB_NAME`)
+  - `DB_USERNAME` - Database user (from `ORO_DB_USER`)
+  - `DB_PASSWORD` - Database password (from `ORO_DB_PASSWORD`)
+
+### Step 3: Create Laravel Project
 
 Create new Laravel project using Composer:
 
@@ -31,13 +55,13 @@ Create new Laravel project using Composer:
 orodc exec composer create-project laravel/laravel .
 ```
 
-### Step 3: Install Dependencies
+### Step 4: Install Dependencies
 
 ```bash
 orodc exec composer install
 ```
 
-### Step 4: Configure Environment
+### Step 5: Configure Environment
 
 Copy environment file and configure:
 
@@ -45,13 +69,13 @@ Copy environment file and configure:
 orodc exec cp .env.example .env
 ```
 
-Edit `.env` with database connection details from `orodc exec env | grep ORO_`:
+Edit `.env` with database connection details from environment variables extracted in Step 2:
 - `DB_HOST` - Database host (usually "database")
 - `DB_DATABASE` - Database name
 - `DB_USERNAME` - Database user
 - `DB_PASSWORD` - Database password
 
-### Step 5: Generate Application Key
+### Step 6: Generate Application Key
 
 **REQUIRED**: Generate application encryption key:
 
@@ -59,13 +83,13 @@ Edit `.env` with database connection details from `orodc exec env | grep ORO_`:
 orodc exec artisan key:generate
 ```
 
-### Step 6: Run Database Migrations
+### Step 7: Run Database Migrations
 
 ```bash
 orodc exec artisan migrate
 ```
 
-### Step 7: Clear and Cache Configuration
+### Step 8: Clear and Cache Configuration
 
 ```bash
 orodc exec artisan config:clear

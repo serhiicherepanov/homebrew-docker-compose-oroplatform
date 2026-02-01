@@ -23,7 +23,29 @@ orodc exec ls -la
 
 **IMPORTANT**: Project creation commands MUST be run in an empty directory.
 
-### Step 2: Create Oro Project
+### Step 2: Extract Environment Variables
+
+**REQUIRED**: Before running installation commands, extract environment variables if needed for configuration:
+
+```bash
+# Primary command: Get all OroDC service connection variables
+orodc exec env | grep ORO_
+
+# Or get all environment variables
+orodc exec env
+```
+
+**IMPORTANT**: 
+- Extract environment variables **BEFORE running installation commands** if you need to configure database or other services manually
+- The `orodc install` command (Step 4) handles most configuration automatically, but you may need variables for manual configuration
+- Common variables:
+  - `DOCKER_BASE_URL` - Application base URL
+  - `ORO_DB_HOST` - Database host (usually "database")
+  - `ORO_DB_NAME` - Database name
+  - `ORO_DB_USER` - Database user
+  - `ORO_DB_PASSWORD` - Database password
+
+### Step 3: Create Oro Project
 
 Choose one of the following methods:
 
@@ -63,7 +85,7 @@ orodc exec composer create-project oro/platform-application .
 
 **For Enterprise Edition**: Enterprise versions require access to private Oro repositories and cannot be installed via public composer create-project. Use git clone from your Enterprise repository or contact Oro support for Enterprise installation instructions.
 
-### Step 3: Install Dependencies
+### Step 4: Install Dependencies
 
 Install PHP dependencies via Composer:
 
@@ -71,7 +93,7 @@ Install PHP dependencies via Composer:
 orodc exec composer install
 ```
 
-### Step 4: Install Oro Platform
+### Step 5: Install Oro Platform
 
 **REQUIRED**: Run Oro installation command:
 
@@ -91,7 +113,7 @@ This command will:
 - Configure environment
 - Set up initial data (may prompt for admin credentials)
 
-### Step 5: Build Assets
+### Step 6: Build Assets
 
 **REQUIRED**: Build frontend assets:
 
@@ -99,7 +121,7 @@ This command will:
 orodc exec bin/console oro:assets:build default -w
 ```
 
-### Step 6: Clear and Warm Up Cache
+### Step 7: Clear and Warm Up Cache
 
 ```bash
 orodc exec bin/console cache:clear

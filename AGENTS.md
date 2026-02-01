@@ -202,7 +202,27 @@ Always check `bin/orodc` first before analyzing individual scripts.
 - User: "почему это происходит?" → ✅ Explain the reason, ❌ Don't "fix" it
 - User: "где находится конфиг?" → ✅ Show the location, ❌ Don't move it
 
-## 14. Docker Image Building
+## 14. Check Similar Components
+
+**CRITICAL:** When fixing or modifying a component that performs a specific function, **ALWAYS** check and update all similar components that perform identical or similar work.
+
+- ✅ When fixing `cursor.sh` → check `codex.sh` and `gemini.sh` (similar AI agent integration)
+- ✅ When modifying command logic → check all commands that use similar patterns
+- ✅ When updating configuration handling → check all places that handle the same configuration
+- ✅ When fixing file creation logic → check all scripts that create similar files
+
+**Why this matters:**
+- Ensures consistency across the codebase
+- Prevents similar issues from existing in multiple places
+- Maintains uniform behavior for similar functionality
+- Reduces technical debt and future bugs
+
+**Examples:**
+- Fixing `.cursorrules` creation in `cursor.sh` → ✅ Also check `codex.sh` and `gemini.sh`
+- Updating `DC_ORO_CONFIG_DIR` usage → ✅ Check all scripts that use config directory
+- Modifying file backup logic → ✅ Check all scripts that create backups
+
+## 15. Docker Image Building
 
 **CRITICAL:** Never manually build Docker images - use `orodc docker-build`!
 

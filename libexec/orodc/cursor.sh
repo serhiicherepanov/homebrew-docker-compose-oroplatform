@@ -491,8 +491,8 @@ main() {
     project_name="default"
   fi
   
-  # Create AGENTS.md file in ~/.orodc/{project_name}/ directory
-  local agents_dir="${HOME}/.orodc/${project_name}"
+  # Create AGENTS.md file in config directory (DC_ORO_CONFIG_DIR or ~/.orodc/{project_name})
+  local agents_dir="${DC_ORO_CONFIG_DIR:-${HOME}/.orodc/${project_name}}"
   local agents_file="${agents_dir}/AGENTS.md"
   mkdir -p "$agents_dir"
   
@@ -550,34 +550,69 @@ main() {
     export DC_ORO_APPDIR
   fi
   
-  # Create .cursorrules file in project directory with system prompt
-  # Cursor CLI reads .cursorrules from the current working directory
+  # Create .cursorrules file in config directory (not in project directory)
+  # Cursor CLI reads .cursorrules from the current working directory, so we create a symlink
   local project_dir="${DC_ORO_APPDIR:-$PWD}"
-  local cursorrules_file="${project_dir}/.cursorrules"
+  local config_dir="${DC_ORO_CONFIG_DIR:-${HOME}/.orodc/${project_name}}"
+  local cursorrules_config_file="${config_dir}/.cursorrules"
+  local cursorrules_project_file="${project_dir}/.cursorrules"
   
-  # Backup existing .cursorrules if it exists
+  # Ensure config directory exists
+  mkdir -p "$config_dir"
+  
+  # Backup existing .cursorrules in project if it exists and is not a symlink
   local cursorrules_backup=""
-  if [[ -f "$cursorrules_file" ]]; then
-    cursorrules_backup="${cursorrules_file}.orodc-backup-$(date +%s)"
-    cp "$cursorrules_file" "$cursorrules_backup"
+  if [[ -f "$cursorrules_project_file" ]] && [[ ! -L "$cursorrules_project_file" ]]; then
+    cursorrules_backup="${cursorrules_project_file}.orodc-backup-$(date +%s)"
+    cp "$cursorrules_project_file" "$cursorrules_backup"
     msg_info "Backed up existing .cursorrules to: $cursorrules_backup"
   fi
   
-  # Write system prompt to .cursorrules file
-  generate_system_prompt "$cms_type" "$doc_context" "$agents_source_dir" > "$cursorrules_file"
-  msg_info "Created .cursorrules file: $cursorrules_file"
+  # Backup existing .cursorrules in config directory if it exists
+  local cursorrules_config_backup=""
+  if [[ -f "$cursorrules_config_file" ]]; then
+    cursorrules_config_backup="${cursorrules_config_file}.orodc-backup-$(date +%s)"
+    cp "$cursorrules_config_file" "$cursorrules_config_backup"
+    msg_info "Backed up existing .cursorrules in config to: $cursorrules_config_backup"
+  fi
+  
+  # Write system prompt to .cursorrules file in config directory
+  generate_system_prompt "$cms_type" "$doc_context" "$agents_source_dir" > "$cursorrules_config_file"
+  msg_info "Created .cursorrules file in config directory: $cursorrules_config_file"
+  
+  # Create symlink in project directory pointing to config directory
+  # Remove existing file/symlink if it exists
+  if [[ -e "$cursorrules_project_file" ]]; then
+    rm -f "$cursorrules_project_file"
+  fi
+  # Create relative symlink if possible, otherwise absolute
+  local symlink_target
+  if [[ "$project_dir" == "$HOME"* ]] && [[ "$config_dir" == "$HOME"* ]]; then
+    # Try to create relative symlink
+    local rel_path=$(realpath --relative-to="$project_dir" "$cursorrules_config_file" 2>/dev/null || echo "$cursorrules_config_file")
+    ln -sf "$rel_path" "$cursorrules_project_file"
+  else
+    # Use absolute path
+    ln -sf "$cursorrules_config_file" "$cursorrules_project_file"
+  fi
+  msg_info "Created symlink: $cursorrules_project_file -> $cursorrules_config_file"
   
   # Cleanup function to restore original .cursorrules if needed
   cleanup_cursorrules() {
+    # Restore config file if backup exists
+    if [[ -n "$cursorrules_config_backup" ]] && [[ -f "$cursorrules_config_backup" ]]; then
+      mv "$cursorrules_config_backup" "$cursorrules_config_file"
+      msg_info "Restored original .cursorrules in config directory"
+    fi
+    # Restore project file if backup exists (and it was not a symlink)
     if [[ -n "$cursorrules_backup" ]] && [[ -f "$cursorrules_backup" ]]; then
-      mv "$cursorrules_backup" "$cursorrules_file"
-      msg_info "Restored original .cursorrules file"
-    elif [[ -f "$cursorrules_file" ]]; then
-      # Only remove if we created it (no backup means it didn't exist before)
-      if [[ -z "$cursorrules_backup" ]]; then
-        rm -f "$cursorrules_file"
-        msg_info "Removed temporary .cursorrules file"
-      fi
+      rm -f "$cursorrules_project_file"
+      mv "$cursorrules_backup" "$cursorrules_project_file"
+      msg_info "Restored original .cursorrules in project directory"
+    elif [[ -L "$cursorrules_project_file" ]]; then
+      # Remove symlink if we created it (no backup means it didn't exist before)
+      rm -f "$cursorrules_project_file"
+      msg_info "Removed symlink: $cursorrules_project_file"
     fi
   }
   
@@ -613,7 +648,8 @@ main() {
   
   # Print command being executed (dark gray text)
   msg_debug "Executing: $CURSOR_BIN ${cursor_args[*]}"
-  msg_debug "System prompt file: $cursorrules_file"
+  msg_debug "System prompt file (config): $cursorrules_config_file"
+  msg_debug "System prompt file (project symlink): $cursorrules_project_file"
   msg_debug "Working directory: $PWD"
   
   exec "$CURSOR_BIN" "${cursor_args[@]}"

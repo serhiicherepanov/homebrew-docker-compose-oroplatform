@@ -32,8 +32,8 @@ main() {
   # Get project name
   local project_name=$(get_project_name)
   
-  # Create AGENTS.md file in ~/.orodc/{project_name}/ directory
-  local agents_dir="${HOME}/.orodc/${project_name}"
+  # Create AGENTS.md file in config directory (DC_ORO_CONFIG_DIR or ~/.orodc/{project_name})
+  local agents_dir="${DC_ORO_CONFIG_DIR:-${HOME}/.orodc/${project_name}}"
   local agents_file="${agents_dir}/AGENTS.md"
   mkdir -p "$agents_dir"
   

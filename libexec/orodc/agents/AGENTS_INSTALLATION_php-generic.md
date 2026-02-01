@@ -23,7 +23,33 @@ orodc exec ls -la
 
 **IMPORTANT**: Project creation commands MUST be run in an empty directory.
 
-### Step 2: Initialize Project Structure
+### Step 2: Extract Environment Variables
+
+**REQUIRED**: Before running installation commands, extract environment variables needed for configuration:
+
+```bash
+# Primary command: Get all OroDC service connection variables
+orodc exec env | grep ORO_
+
+# Or get all environment variables
+orodc exec env
+
+# Filter by specific service:
+orodc exec env | grep -i database
+orodc exec env | grep -i redis
+orodc exec env | grep -i search
+```
+
+**IMPORTANT**: 
+- **MUST be done BEFORE Step 6 (Configure Application)** - you'll need these variables for application configuration
+- Save these variables or keep them accessible
+- Common variables you'll need:
+  - Database connection variables (`ORO_DB_HOST`, `ORO_DB_NAME`, `ORO_DB_USER`, `ORO_DB_PASSWORD`)
+  - Cache/Redis variables (if using cache)
+  - Search engine variables (if using search)
+  - Message queue variables (if using RabbitMQ)
+
+### Step 3: Initialize Project Structure
 
 Create basic project structure:
 
@@ -31,7 +57,7 @@ Create basic project structure:
 orodc exec mkdir -p src public config
 ```
 
-### Step 3: Create Composer Configuration
+### Step 4: Create Composer Configuration
 
 Create `composer.json`:
 
@@ -41,13 +67,13 @@ orodc exec composer init
 
 Or create manually with basic structure.
 
-### Step 4: Install Dependencies
+### Step 5: Install Dependencies
 
 ```bash
 orodc exec composer install
 ```
 
-### Step 5: Create Entry Point
+### Step 6: Create Entry Point
 
 Create `public/index.php` as application entry point:
 
@@ -58,10 +84,10 @@ require_once __DIR__ . '/../vendor/autoload.php';
 // Your application bootstrap code here
 ```
 
-### Step 6: Configure Application
+### Step 7: Configure Application
 
 Create configuration files as needed:
-- Database configuration (use environment variables from `orodc exec env | grep ORO_`)
+- Database configuration (use environment variables extracted in Step 2)
 - Application settings
 - Service configurations
 

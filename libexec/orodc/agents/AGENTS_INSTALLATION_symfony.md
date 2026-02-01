@@ -23,7 +23,28 @@ orodc exec ls -la
 
 **IMPORTANT**: Project creation commands MUST be run in an empty directory.
 
-### Step 2: Create Symfony Project
+### Step 2: Extract Environment Variables
+
+**REQUIRED**: Before running installation commands, extract environment variables needed for configuration:
+
+```bash
+# Primary command: Get all OroDC service connection variables
+orodc exec env | grep ORO_
+
+# Or get all environment variables
+orodc exec env
+
+# Filter by specific service:
+orodc exec env | grep -i database
+```
+
+**IMPORTANT**: 
+- **MUST be done BEFORE Step 4 (Configure Environment)** - you'll need these variables for `.env.local` configuration
+- Save these variables or keep them accessible
+- Key variables you'll need:
+  - `DATABASE_URL` or individual database variables (`ORO_DB_HOST`, `ORO_DB_NAME`, `ORO_DB_USER`, `ORO_DB_PASSWORD`)
+
+### Step 3: Create Symfony Project
 
 Create new Symfony project using Symfony installer or Composer:
 
@@ -43,13 +64,13 @@ orodc exec composer require symfony/console symfony/framework-bundle symfony/web
 orodc exec composer create-project symfony/website-skeleton .
 ```
 
-### Step 3: Install Dependencies
+### Step 4: Install Dependencies
 
 ```bash
 orodc exec composer install
 ```
 
-### Step 4: Configure Environment
+### Step 5: Configure Environment
 
 Copy environment file and configure:
 
@@ -57,10 +78,10 @@ Copy environment file and configure:
 orodc exec cp .env .env.local
 ```
 
-Edit `.env.local` with database connection details from `orodc exec env | grep ORO_`:
+Edit `.env.local` with database connection details from environment variables extracted in Step 2:
 - `DATABASE_URL` - Use database connection from environment variables
 
-### Step 5: Create Database Schema
+### Step 6: Create Database Schema
 
 ```bash
 orodc exec bin/console doctrine:database:create
@@ -74,7 +95,7 @@ orodc exec bin/console make:migration
 orodc exec bin/console doctrine:migrations:migrate
 ```
 
-### Step 6: Clear Cache
+### Step 7: Clear Cache
 
 ```bash
 orodc exec bin/console cache:clear

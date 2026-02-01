@@ -72,7 +72,37 @@ ls -la
 
 **IMPORTANT**: Project creation commands (`orodc exec composer create-project` or `orodc exec git clone`) MUST be run in an empty directory.
 
-### 6. Create Project Codebase
+### 6. Extract Environment Variables
+
+**REQUIRED**: Before running installation commands, extract environment variables needed for configuration:
+
+```bash
+# Primary command: Get all OroDC service connection variables
+orodc exec env | grep ORO_
+
+# Or get all environment variables
+orodc exec env
+
+# Filter by specific service:
+orodc exec env | grep -i database
+orodc exec env | grep -i search
+orodc exec env | grep -i redis
+orodc exec env | grep -i rabbitmq
+```
+
+**IMPORTANT**: 
+- **MUST be done BEFORE running installation commands** that require database, search engine, or other service configuration
+- These variables contain connection details for database, cache, search engine, message queue, and other services
+- Save these variables or keep them accessible - you'll need them for installation commands
+- Common variables you'll need:
+  - `DOCKER_BASE_URL` - Application base URL
+  - `ORO_DB_HOST` - Database host (usually "database")
+  - `ORO_DB_NAME` - Database name
+  - `ORO_DB_USER` - Database user
+  - `ORO_DB_PASSWORD` - Database password
+  - Search engine host and port (usually "search" and 9200)
+
+### 7. Create Project Codebase
 
 **This step is CMS-specific** - run `orodc agents installation` to see detailed instructions for your CMS type:
 - Magento: Run `orodc agents installation magento` - uses `orodc exec composer create-project`
@@ -88,7 +118,7 @@ ls -la
 - For git clones: use `orodc exec git clone`
 - Follow ALL steps from the CMS-specific installation guide
 
-### 7. Verify Installation
+### 8. Verify Installation
 
 After project creation:
 - Check application URL: `https://{project_name}.docker.local`

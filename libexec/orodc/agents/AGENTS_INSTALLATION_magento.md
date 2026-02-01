@@ -146,11 +146,45 @@ orodc exec bin/magento setup:install \
 
 **CRITICAL - REQUIRED**: Deploy static content (build frontend) after installation. **DO NOT SKIP THIS STEP** - frontend will not work without it:
 
+**CRITICAL**: You MUST specify locale(s) explicitly - using `setup:static-content:deploy -f` WITHOUT locale parameters will NOT deploy CSS styles correctly. Pages will appear without styles.
+
+**REQUIRED**: Always specify at least one locale:
+
 ```bash
-orodc exec bin/magento setup:static-content:deploy -f
+# Deploy static content with explicit locale (en_US is default, REQUIRED)
+orodc exec bin/magento setup:static-content:deploy en_US -f
+
+# Or deploy for multiple locales:
+orodc exec bin/magento setup:static-content:deploy en_US ru_RU -f
+
+# To deploy ALL locales, first get list of all installed locales:
+orodc exec bin/magento info:language:list
+
+# Then deploy for all locales (replace with actual locales from the list):
+orodc exec bin/magento setup:static-content:deploy en_US de_DE fr_FR es_ES ru_RU -f
 ```
 
-**IMPORTANT**: This step builds the frontend assets. Without it, the frontend will not display correctly.
+**How to get all installed locales:**
+```bash
+# Method 1: List all installed languages/locales
+orodc exec bin/magento info:language:list
+
+# Method 2: Check database for configured locales
+orodc exec bin/magento db:query "SELECT DISTINCT value FROM core_config_data WHERE path LIKE 'general/locale%'"
+
+# Method 3: Check installed language packs in app/i18n/
+orodc exec ls -la app/i18n/
+```
+
+**Why locale is REQUIRED:**
+- **Note**: In older Magento 2 versions (2.3 and earlier), `setup:static-content:deploy -f` without locale parameters would automatically deploy all locales and themes
+- **In newer Magento 2 versions** (2.4+), this behavior changed - you MUST specify locale(s) explicitly
+- Running `setup:static-content:deploy -f` WITHOUT locale parameters will NOT compile CSS styles properly in newer versions
+- Pages will appear without styles if locale is not specified
+- The `-f` flag only forces regeneration but doesn't ensure CSS compilation without locale
+- Always specify at least one locale (e.g., `en_US`) to ensure styles are deployed correctly
+
+**IMPORTANT**: This step builds the frontend assets including CSS styles. Without proper locale specification, styles will not display correctly.
 
 ### Step 6: Compile Dependency Injection
 

@@ -51,8 +51,15 @@ RUN apk add --no-cache libstdc++
 COPY --from=app_node /usr/local /usr/local
 COPY --from=app_node /opt /opt
 
-# Install pnpm and smoke test for Node.js
-RUN npm install -g pnpm && node --version && npm --version && yarn --version && pnpm --version
+# Install package managers and smoke test Node.js toolchain
+RUN case "${NODE_VERSION}" in \
+      14*) pnpm_version="7.33.5" ;; \
+      16*) pnpm_version="7.33.5" ;; \
+      *) pnpm_version="9.15.9" ;; \
+    esac \
+    && rm -f /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/pnpm /usr/local/bin/pnpx \
+    && npm install -g yarn@1.22.22 "pnpm@${pnpm_version}" \
+    && node --version && npm --version && yarn --version && pnpm --version
 
 # Set compiler flags for node-sass compatibility
 ENV CXXFLAGS="-std=c++14"
